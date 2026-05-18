@@ -8,7 +8,7 @@
 const http    = require("http");
 const { spawn } = require("child_process");
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.CHATBOT_PORT || 5000;
 
 /* ═══════════════════════════ HTML/CSS/JS ═══════════════════════════ */
 const HTML = /* html */`<!DOCTYPE html>
