@@ -25,7 +25,7 @@ function esc(s: string): string {
 function inlineEscaped(t: string): string {
   // images: ![alt](url) → thumbnail
   t = t.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,
-    `<img src="$2" alt="$1" class="md-thumb" loading="lazy" />`);
+    (_, alt, url) => `<span class="md-img-wrap"><img src="${url}" alt="${alt}" class="md-thumb" loading="lazy" onerror="this.style.display='none'" /></span>`);
   // links: [text](url) → modal
   t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
     `<a href="#!" class="md-a md-link-modal" data-url="${'$2'}">${'$1'}</a>`);
@@ -128,7 +128,7 @@ function md(raw: string): string {
     // ── Image block
     const imgMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
     if (imgMatch) {
-      out.push(`<img src="${esc(imgMatch[2])}" alt="${esc(imgMatch[1])}" class="md-thumb" loading="lazy" />`);
+      out.push(`<span class="md-img-wrap"><img src="${esc(imgMatch[2])}" alt="${esc(imgMatch[1])}" class="md-thumb" loading="lazy" onerror="this.style.display='none'" /></span>`);
       i++;
       continue;
     }
@@ -140,7 +140,10 @@ function md(raw: string): string {
       if (vidMatch[1] === "YouTube") {
         url = url.replace(/watch\?v=/, "embed/").replace(/youtu\.be\//, "youtube.com/embed/");
       }
-      out.push(`<div class="md-media md-video"><iframe src="${esc(url)}" frameborder="0" allowfullscreen loading="lazy"></iframe></div>`);
+      // Only render if URL looks valid (starts with https://)
+      if (/^https:\/\//.test(url)) {
+        out.push(`<div class="md-media md-video"><iframe src="${esc(url)}" frameborder="0" allowfullscreen loading="lazy" sandbox="allow-scripts allow-same-origin allow-presentation"></iframe></div>`);
+      }
       i++;
       continue;
     }
@@ -302,6 +305,8 @@ const STYLES = `
   /* ── Media ── */
   .md-media { margin: .6em 0; }
   .md-thumb { max-width: 280px; max-height: 180px; height: auto; border: 2px solid #cc0000; display: block; margin: .4em 0; border-radius: 4px; }
+  .md-img-wrap { display: block; margin: .4em 0; }
+  .md-img-broken { display: inline-block; color: #555; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; font-family: monospace; border: 1px dashed #333; padding: 8px 14px; }
   .md-media img { max-width: 100%; height: auto; border: 1px solid #1a1a1a; display: block; }
   .md-video { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; }
   .md-video iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 1px solid #1a1a1a; }
