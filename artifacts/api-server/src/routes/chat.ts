@@ -135,8 +135,16 @@ router.post("/chat", async (req: Request, res: Response) => {
       const evType = event["type"] as string;
 
       if (!sessionSent && event["sessionID"]) {
-        res.write(sse({ type: "session", session_id: event["sessionID"] }));
+        const sid = event["sessionID"] as string;
+        res.write(sse({ type: "session", session_id: sid }));
         sessionSent = true;
+        // Persist the opencode session ID so loaded conversations resume with full context
+        if (convId) {
+          db.update(conversationsTable)
+            .set({ sessionId: sid })
+            .where(eq(conversationsTable.id, convId))
+            .catch(() => {});
+        }
       }
 
       if (evType === "step_start") {
