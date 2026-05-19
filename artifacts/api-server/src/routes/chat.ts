@@ -4,6 +4,8 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 import type { Request, Response } from "express";
+import { db, conversationsTable, messagesTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 // Prefer the local node_modules binary so it works in production deployments too
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -17,10 +19,16 @@ const SYSTEM_PROMPT = `Sos un asistente periodista con perspectiva de clase. Reg
 - No declarar: analizar y comunicar.
 - Datos chequeados. Énfasis en cifras, números, nombres propios, fechas, porcentajes.
 - Usar markdown: negrita para datos clave, listas para enumerar, encabezados solo si son necesarios.
-- Citar fuentes al final usando este formato exacto: <small>[Nombre fuente](url)</small>
-- Si no tenés la URL exacta, citar así: <small>Nombre fuente — fecha</small>
+- Para datos clave (cifras, indicadores) usar este bloque:
+  ::: cifra
+  **Indicador**: valor
+  :::
+- Separar secciones con ---
+- Para incluir imágenes: ![descripción](url-imagen) — incluir al menos UNA imagen relevante al tema usando formato markdown. La imagen debe estar en su propia línea.
+- Para incluir videos: @[YouTube](url-del-video)
+- Citar fuentes usando links markdown: [Nombre fuente](url)
+- Si no tenés la URL exacta, citar así: [Nombre fuente — fecha]
 - Ser consciente de la fecha y hora actual (se indica en cada mensaje).
-- Perspectiva de clase: jerarquizar quién gana y quién pierde en cada hecho.
 - Sin frases de relleno, sin introducción, ir directo al análisis.`;
 
 function sse(obj: Record<string, unknown>): string {
@@ -39,10 +47,11 @@ function buildMessage(message: string, isNewSession: boolean): string {
   return `[Fecha y hora actual: ${now}]\n\n${message}`;
 }
 
-router.post("/chat", (req: Request, res: Response) => {
-  const { message, session_id } = req.body as {
+router.post("/chat", async (req: Request, res: Response) => {
+  const { message, session_id, conversation_id } = req.body as {
     message?: string;
     session_id?: string;
+    conversation_id?: number;
   };
 
   if (!message?.trim()) {
@@ -52,6 +61,29 @@ router.post("/chat", (req: Request, res: Response) => {
 
   const isNewSession = !session_id;
   const fullMessage = buildMessage(message.trim(), isNewSession);
+
+  /* ── DB: save / resolve conversation ── */
+  let convId = conversation_id ? Number(conversation_id) : null;
+  try {
+    if (!convId) {
+      const [conv] = await db
+        .insert(conversationsTable)
+        .values({ title: message.trim().slice(0, 60), sessionId: session_id || null })
+        .returning({ id: conversationsTable.id });
+      convId = conv.id;
+    } else {
+      await db
+        .update(conversationsTable)
+        .set({ updatedAt: new Date() })
+        .where(eq(conversationsTable.id, convId));
+    }
+    await db
+      .insert(messagesTable)
+      .values({ conversationId: convId, role: "user", content: message.trim() });
+  } catch (err) {
+    res.status(500).json({ error: "DB error: " + String(err) });
+    return;
+  }
 
   const args = ["run", "--format", "json"];
   if (session_id) args.push("--session", session_id);
@@ -64,6 +96,9 @@ router.post("/chat", (req: Request, res: Response) => {
     "X-Accel-Buffering": "no",
   });
 
+  // Send conversation_id so frontend can track it
+  res.write(sse({ type: "conversation", conversation_id: convId }));
+
   let proc: ReturnType<typeof spawn>;
   try {
     proc = spawn(OPENCODE, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -74,6 +109,7 @@ router.post("/chat", (req: Request, res: Response) => {
   }
 
   let sessionSent = false;
+  let botContent = "";
 
   proc.stdout!.setEncoding("utf8");
   proc.stdout!.on("data", (chunk: string) => {
@@ -93,7 +129,9 @@ router.post("/chat", (req: Request, res: Response) => {
 
       // Only emit text events — skip tool_use noise
       if (event["type"] === "text" && part["type"] === "text" && part["text"]) {
-        res.write(sse({ type: "text", text: part["text"] }));
+        const text = part["text"] as string;
+        botContent += text;
+        res.write(sse({ type: "text", text }));
       }
     }
   });
@@ -102,9 +140,17 @@ router.post("/chat", (req: Request, res: Response) => {
   proc.stderr!.setEncoding("utf8");
   proc.stderr!.on("data", (d: string) => { stderrBuf += d; });
 
-  proc.on("close", (code: number | null) => {
+  proc.on("close", async (code: number | null) => {
     if (code !== 0 && stderrBuf.trim()) {
       res.write(sse({ type: "error", message: stderrBuf.trim().slice(0, 400) }));
+    }
+    // Save bot response to DB
+    if (botContent.trim()) {
+      try {
+        await db
+          .insert(messagesTable)
+          .values({ conversationId: convId!, role: "bot", content: botContent.trim() });
+      } catch {}
     }
     res.write(sse({ type: "done" }));
     res.end();
