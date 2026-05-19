@@ -450,7 +450,7 @@ export default function App() {
           <div style={{ width: 9, height: 9, background: "#cc0000", flexShrink: 0 }} />
           <span style={{ color: "#333", fontSize: 11, fontWeight: 700,
             letterSpacing: ".12em", textTransform: "uppercase", fontFamily: MONO }}>
-            opencode — periodismo de datos
+             Modo Periodista
           </span>
           {sessionId && (
             <span style={{ marginLeft: "auto", color: "#333", fontSize: 10,
