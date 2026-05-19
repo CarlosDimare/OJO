@@ -338,6 +338,7 @@ export default function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
+  const [charlaMode, setCharlaMode] = useState(false);
   const msgsEndRef               = useRef<HTMLDivElement>(null);
   const inputRef                 = useRef<HTMLTextAreaElement>(null);
   const chatMsgsRef              = useRef<HTMLDivElement>(null);
@@ -472,7 +473,7 @@ export default function App() {
     try {
       const res = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, session_id: cur, conversation_id: cid }),
+        body: JSON.stringify({ message: text, session_id: cur, conversation_id: cid, charla_mode: charlaMode }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const reader = res.body!.getReader(); const dec = new TextDecoder(); let buf = "";
@@ -723,6 +724,34 @@ export default function App() {
             {view === "chat" ? "◈ PERIODISTA" : view === "voz" ? "♪ VOZ" : "▸ TERMINAL"}
           </span>
         </div>
+
+        {/* Modo charla toggle — solo visible en chat */}
+        {view === "chat" && (
+          <button
+            onClick={() => {
+              setCharlaMode((m) => !m);
+              // Nueva sesión para que el system prompt nuevo tome efecto
+              setSessionId(null);
+              setConversationId(null);
+            }}
+            title={charlaMode ? "Cambiar a modo periodista" : "Cambiar a modo charla"}
+            style={{
+              marginLeft: 16,
+              background: charlaMode ? "#fff" : "transparent",
+              color: charlaMode ? "#cc0000" : "#444",
+              border: charlaMode ? "none" : "1px solid #333",
+              padding: "3px 10px",
+              fontSize: 10, fontWeight: 700, letterSpacing: ".1em",
+              textTransform: "uppercase", cursor: "pointer",
+              fontFamily: MONO, transition: "all .15s",
+              whiteSpace: "nowrap",
+            }}
+            onMouseEnter={(e) => { if (!charlaMode) e.currentTarget.style.borderColor = "#cc0000"; e.currentTarget.style.color = charlaMode ? "#cc0000" : "#cc0000"; }}
+            onMouseLeave={(e) => { if (!charlaMode) e.currentTarget.style.borderColor = "#333"; e.currentTarget.style.color = charlaMode ? "#cc0000" : "#444"; }}
+          >
+            {charlaMode ? "✦ CHARLA" : "○ CHARLA"}
+          </button>
+        )}
 
         {/* Clock */}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", paddingRight: 16 }}>

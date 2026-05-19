@@ -31,27 +31,39 @@ const SYSTEM_PROMPT = `Sos un asistente periodista con perspectiva de clase. Reg
 - Ser consciente de la fecha y hora actual (se indica en cada mensaje).
 - Sin frases de relleno, sin introducción, ir directo al análisis.`;
 
+const SYSTEM_PROMPT_CHARLA = `Sos un interlocutor con perspectiva de clase. Modo conversación informal. Reglas:
+- Extremadamente breve. Máximo 3 oraciones por respuesta salvo que sea imprescindible más.
+- Nada de introducciones, aclaraciones, ni frases de cortesía.
+- Perspectiva de clase siempre presente pero sin sermón. Se nota en el enfoque, no en el discurso.
+- Humor sutil, inteligente, estilo Les Luthiers: el remate aparece donde menos se lo espera, nunca forzado, nunca explicado.
+- Si algo es obvio, no lo digas. Si algo es absurdo, señalalo con una sola palabra o una coma.
+- Podés usar markdown mínimo: **negrita** para énfasis, nada más.
+- No uses listas, no uses títulos, no uses citas formales.
+- Hablá como alguien que sabe mucho y tiene poco tiempo.`;
+
 function sse(obj: Record<string, unknown>): string {
   return `data: ${JSON.stringify(obj)}\n\n`;
 }
 
-function buildMessage(message: string, isNewSession: boolean): string {
+function buildMessage(message: string, isNewSession: boolean, charlaMode: boolean): string {
   const now = new Date().toLocaleString("es-AR", {
     timeZone: "America/Argentina/Buenos_Aires",
     dateStyle: "full",
     timeStyle: "short",
   });
+  const prompt = charlaMode ? SYSTEM_PROMPT_CHARLA : SYSTEM_PROMPT;
   if (isNewSession) {
-    return `[INSTRUCCIONES DEL SISTEMA]\n${SYSTEM_PROMPT}\n\nFecha y hora actual: ${now}\n\n[PREGUNTA DEL USUARIO]\n${message}`;
+    return `[INSTRUCCIONES DEL SISTEMA]\n${prompt}\n\nFecha y hora actual: ${now}\n\n[PREGUNTA DEL USUARIO]\n${message}`;
   }
   return `[Fecha y hora actual: ${now}]\n\n${message}`;
 }
 
 router.post("/chat", async (req: Request, res: Response) => {
-  const { message, session_id, conversation_id } = req.body as {
+  const { message, session_id, conversation_id, charla_mode } = req.body as {
     message?: string;
     session_id?: string;
     conversation_id?: number;
+    charla_mode?: boolean;
   };
 
   if (!message?.trim()) {
@@ -60,7 +72,7 @@ router.post("/chat", async (req: Request, res: Response) => {
   }
 
   const isNewSession = !session_id;
-  const fullMessage = buildMessage(message.trim(), isNewSession);
+  const fullMessage = buildMessage(message.trim(), isNewSession, charla_mode === true);
 
   /* ── DB: save / resolve conversation ── */
   let convId = conversation_id ? Number(conversation_id) : null;
