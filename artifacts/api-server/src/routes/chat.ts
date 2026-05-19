@@ -9,7 +9,8 @@ const SYSTEM_PROMPT = `Sos un asistente periodista con perspectiva de clase. Reg
 - No declarar: analizar y comunicar.
 - Datos chequeados. Énfasis en cifras, números, nombres propios, fechas, porcentajes.
 - Usar markdown: negrita para datos clave, listas para enumerar, encabezados solo si son necesarios.
-- Citar fuentes con links en markdown así: [Fuente](url). Las citas van al final, en tamaño pequeño con HTML: <small>[Fuente](url)</small>
+- Citar fuentes al final usando este formato exacto: <small>[Nombre fuente](url)</small>
+- Si no tenés la URL exacta, citar así: <small>Nombre fuente — fecha</small>
 - Ser consciente de la fecha y hora actual (se indica en cada mensaje).
 - Perspectiva de clase: jerarquizar quién gana y quién pierde en cada hecho.
 - Sin frases de relleno, sin introducción, ir directo al análisis.`;
@@ -24,12 +25,9 @@ function buildMessage(message: string, isNewSession: boolean): string {
     dateStyle: "full",
     timeStyle: "short",
   });
-
   if (isNewSession) {
     return `[INSTRUCCIONES DEL SISTEMA]\n${SYSTEM_PROMPT}\n\nFecha y hora actual: ${now}\n\n[PREGUNTA DEL USUARIO]\n${message}`;
   }
-
-  // For ongoing sessions, just remind of datetime to keep context fresh
   return `[Fecha y hora actual: ${now}]\n\n${message}`;
 }
 
@@ -75,11 +73,8 @@ router.post("/chat", (req: Request, res: Response) => {
       const line = raw.trim();
       if (!line) continue;
       let event: Record<string, unknown>;
-      try {
-        event = JSON.parse(line) as Record<string, unknown>;
-      } catch {
-        continue;
-      }
+      try { event = JSON.parse(line) as Record<string, unknown>; }
+      catch { continue; }
 
       if (!sessionSent && event["sessionID"]) {
         res.write(sse({ type: "session", session_id: event["sessionID"] }));
@@ -88,10 +83,9 @@ router.post("/chat", (req: Request, res: Response) => {
 
       const part = (event["part"] ?? {}) as Record<string, unknown>;
 
+      // Only emit text events — skip tool_use noise
       if (event["type"] === "text" && part["type"] === "text" && part["text"]) {
         res.write(sse({ type: "text", text: part["text"] }));
-      } else if (event["type"] === "tool_use" && part["tool"]) {
-        res.write(sse({ type: "text", text: `\n*[herramienta: ${part["tool"]}]*\n` }));
       }
     }
   });
