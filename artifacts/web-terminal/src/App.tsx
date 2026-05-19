@@ -10,6 +10,7 @@ const WS_URL = (() => {
 })();
 
 const MONO = '"Cascadia Code","Fira Code",Menlo,Consolas,monospace';
+const SANS = '-apple-system,"Segoe UI","Helvetica Neue",Arial,sans-serif';
 
 /* ── Escape HTML special chars ─────────────────────────────────── */
 function esc(s: string): string {
@@ -22,9 +23,12 @@ function esc(s: string): string {
 
 /* ── Inline markdown (runs on already-escaped text EXCEPT for protected HTML) */
 function inlineEscaped(t: string): string {
-  // links: [text](url)
+  // images: ![alt](url) → thumbnail
+  t = t.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,
+    `<img src="$2" alt="$1" class="md-thumb" loading="lazy" />`);
+  // links: [text](url) → modal
   t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
-    `<a href="$2" target="_blank" rel="noopener" class="md-a">$1</a>`);
+    `<a href="#!" class="md-a md-link-modal" data-url="${'$2'}">${'$1'}</a>`);
   // bold+italic ***
   t = t.replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>");
   // bold **
@@ -35,6 +39,10 @@ function inlineEscaped(t: string): string {
   t = t.replace(/_([^_\n]+)_/g, "<em>$1</em>");
   // inline code `
   t = t.replace(/`([^`\n]+)`/g, `<code class="md-ic">$1</code>`);
+  // highlight percentages
+  t = t.replace(/(\d+(?:[.,]\d+)?\s*%)/g, '<span class="md-num">$1</span>');
+  // highlight currency & large figures
+  t = t.replace(/([$]\d+(?:[.,]\d+)?(?:\s*(?:millones|billones|mil|M|B))?)/g, '<span class="md-num">$1</span>');
   return t;
 }
 
@@ -103,6 +111,40 @@ function md(raw: string): string {
       continue;
     }
 
+    // ── Data box ::: cifra
+    if (/^:::\s*cifra/i.test(line.trim())) {
+      const boxLines: string[] = [];
+      i++;
+      while (i < lines.length && !/^:::\s*$/.test(lines[i].trim())) {
+        boxLines.push(lines[i]);
+        i++;
+      }
+      i++; // skip :::
+      const inner = boxLines.map((l) => inlineEscaped(esc(l))).join("<br>");
+      out.push(`<div class="md-data-box">${inner}</div>`);
+      continue;
+    }
+
+    // ── Image block
+    const imgMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+    if (imgMatch) {
+      out.push(`<img src="${esc(imgMatch[2])}" alt="${esc(imgMatch[1])}" class="md-thumb" loading="lazy" />`);
+      i++;
+      continue;
+    }
+
+    // ── Video block (YouTube, Vimeo)
+    const vidMatch = line.match(/^@\[(YouTube|Vimeo)\]\(([^)]+)\)$/);
+    if (vidMatch) {
+      let url = vidMatch[2];
+      if (vidMatch[1] === "YouTube") {
+        url = url.replace(/watch\?v=/, "embed/").replace(/youtu\.be\//, "youtube.com/embed/");
+      }
+      out.push(`<div class="md-media md-video"><iframe src="${esc(url)}" frameborder="0" allowfullscreen loading="lazy"></iframe></div>`);
+      i++;
+      continue;
+    }
+
     // ── Blockquote
     if (line.startsWith("> ")) {
       out.push(`<blockquote class="md-bq">${inlineEscaped(esc(line.slice(2)))}</blockquote>`);
@@ -142,7 +184,7 @@ function md(raw: string): string {
         // <small>[text](url)</small>
         const linkMatch = raw2.match(/^<small>\[([^\]]+)\]\(([^)]+)\)<\/small>$/);
         if (linkMatch) {
-          citeItems.push(`<a href="${linkMatch[2]}" target="_blank" rel="noopener" class="md-cite">${esc(linkMatch[1])}</a>`);
+          citeItems.push(`<a href="#!" class="md-cite md-link-modal" data-url="${esc(linkMatch[2])}">${esc(linkMatch[1])}</a>`);
         } else {
           // <small>plain text</small>
           const textMatch = raw2.match(/^<small>(.*?)<\/small>$/s);
@@ -172,6 +214,10 @@ function md(raw: string): string {
       !/^\d+\. /.test(lines[i]) &&
       !lines[i].startsWith("> ") &&
       !/^---+$/.test(lines[i].trim()) &&
+      !/^:::\s*cifra/i.test(lines[i].trim()) &&
+      !/^:::\s*$/.test(lines[i].trim()) &&
+      !/^!\[/.test(lines[i]) &&
+      !/^@\[/.test(lines[i]) &&
       !/^<small>/.test(lines[i].trim()) &&
       !(lines[i].includes("|") && i + 1 < lines.length && /^[\s|:\-]+$/.test(lines[i + 1]))
     ) {
@@ -212,7 +258,8 @@ function useClock(): string {
 }
 
 interface ChatMessage { role: "user" | "bot"; text: string; html?: string; }
-type View = "terminal" | "chat";
+interface VoiceMessage { role: "user" | "bot"; text: string; }
+type View = "terminal" | "chat" | "voz";
 
 /* ── CSS injected once ──────────────────────────────────────────── */
 const STYLES = `
@@ -225,9 +272,10 @@ const STYLES = `
   /* ── Markdown ── */
   .md-p   { margin: 0 0 .65em; line-height: 1.8; }
   .md-p:last-child { margin-bottom: 0; }
-  .md-h1  { font-size: 1.1em; font-weight: 700; color: #fff; margin: .9em 0 .4em; text-transform: uppercase; letter-spacing: .04em; }
-  .md-h2  { font-size: 1.02em; font-weight: 700; color: #eee; margin: .75em 0 .35em; }
-  .md-h3  { font-size: .96em; font-weight: 700; color: #ddd; margin: .6em 0 .3em; }
+  .md-h1, .md-h2, .md-h3 { text-transform: uppercase; background: #fff; color: #cc0000; padding: 6px 10px; margin: .8em 0 .5em; letter-spacing: .04em; font-family: ${SANS}; }
+  .md-h1 { font-size: 1.3em; font-weight: 800; }
+  .md-h2 { font-size: 1.1em; font-weight: 700; }
+  .md-h3 { font-size: .96em; font-weight: 700; }
   .md-ul, .md-ol { margin: .3em 0 .65em 1.5em; padding: 0; }
   .md-li  { margin-bottom: .3em; line-height: 1.75; }
   .md-pre { background: #0a0a0a; border-left: 3px solid #cc0000; padding: 11px 14px; margin: .6em 0; overflow-x: auto; }
@@ -242,9 +290,24 @@ const STYLES = `
   .md-td  { padding: 5px 10px; border: 1px solid #1e1e1e; color: #d0d0d0; }
   .md-table tr:nth-child(even) td { background: #111; }
   .md-cites { margin-top: .5em; padding-top: .4em; border-top: 1px solid #1e1e1e; display: flex; flex-wrap: wrap; gap: .3em .6em; }
-  .md-cite  { color: #666; font-size: .76em; text-decoration: underline; text-underline-offset: 2px; }
+  .md-cite  { color: #666; font-size: .76em; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
   .md-cite:hover { color: #999; }
   .md-cite-text { color: #555; font-size: .76em; }
+  /* ── Data box ── */
+  .md-data-box { background: #0d0d0d; border: 2px solid #cc0000; padding: 14px 16px; margin: .6em 0; }
+  .md-data-box strong { color: #fff; }
+  .md-data-box br + strong { display: inline-block; margin-top: .3em; }
+  /* ── Number highlight ── */
+  .md-num { color: #cc0000; font-weight: 700; }
+  /* ── Media ── */
+  .md-media { margin: .6em 0; }
+  .md-thumb { max-width: 280px; max-height: 180px; height: auto; border: 2px solid #cc0000; display: block; margin: .4em 0; border-radius: 4px; }
+  .md-media img { max-width: 100%; height: auto; border: 1px solid #1a1a1a; display: block; }
+  .md-video { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; }
+  .md-video iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 1px solid #1a1a1a; }
+  /* ── Modal link ── */
+  .md-link-modal { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+  .md-link-modal:hover { opacity: .8; }
   strong { color: #fff; font-weight: 700; }
   em     { color: #bbb; }
 `;
@@ -269,6 +332,25 @@ export default function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const msgsEndRef               = useRef<HTMLDivElement>(null);
   const inputRef                 = useRef<HTMLTextAreaElement>(null);
+  const chatMsgsRef              = useRef<HTMLDivElement>(null);
+
+  /* modal */
+  const [modalOpen, setModalOpen]       = useState(false);
+  const [modalUrl, setModalUrl]         = useState("");
+  const [modalTitle, setModalTitle]     = useState("");
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError]     = useState("");
+  const [modalHtml, setModalHtml]       = useState("");
+
+  /* voz */
+  const voiceStoppedRef          = useRef(false);
+  const voiceBusyRef             = useRef(false);
+  const recogRef                 = useRef<any>(null);
+  const voiceSessionRef          = useRef<string | null>(null);
+  const [voiceActive, setVoiceActive]     = useState(false);
+  const [voiceStatus, setVoiceStatus]     = useState("");
+  const [voiceMessages, setVoiceMessages] = useState<VoiceMessage[]>([]);
+  const voiceMessagesEndRef               = useRef<HTMLDivElement>(null);
 
   /* ── Terminal setup ─────────────────────────────────────────────── */
   const connect = useCallback(() => {
@@ -332,6 +414,41 @@ export default function App() {
   useEffect(() => { setTimeout(() => fitAddonRef.current?.fit(), 50); }, [view]);
   useEffect(() => { msgsEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  /* ── Modal link delegation ────────────────────────────────────────── */
+  useEffect(() => {
+    const el = chatMsgsRef.current;
+    if (!el) return;
+    const handler = (e: MouseEvent) => {
+      const t = (e.target as HTMLElement).closest(".md-link-modal") as HTMLElement | null;
+      if (!t) return;
+      e.preventDefault();
+      const url = t.getAttribute("data-url") || "";
+      if (!url) return;
+      setModalUrl(url);
+      setModalTitle(t.textContent || "");
+      setModalOpen(true);
+    };
+    el.addEventListener("click", handler);
+    return () => el.removeEventListener("click", handler);
+  }, []);
+
+  /* ── Fetch modal content ───────────────────────────────────────────── */
+  useEffect(() => {
+    if (!modalOpen || !modalUrl) return;
+    setModalLoading(true); setModalError(""); setModalHtml("");
+    fetch(`/api/fetch-proxy?url=${encodeURIComponent(modalUrl)}`)
+      .then(async (r) => {
+        const ct = r.headers.get("content-type") || "";
+        if (!r.ok) {
+          const body = ct.includes("json") ? (await r.json()).error : `HTTP ${r.status}`;
+          throw new Error(body);
+        }
+        return r.text();
+      })
+      .then((html) => { setModalHtml(html); setModalLoading(false); })
+      .catch((err) => { setModalError(err.message); setModalLoading(false); });
+  }, [modalOpen, modalUrl]);
+
   /* ── Send chat ──────────────────────────────────────────────────── */
   const sendMessage = useCallback(async () => {
     const text = input.trim();
@@ -370,6 +487,103 @@ export default function App() {
     } finally { setBusy(false); setTimeout(() => inputRef.current?.focus(), 50); }
   }, [input, busy, sessionId]);
 
+  /* ── Voice chat ──────────────────────────────────────────────────── */
+  useEffect(() => { voiceMessagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [voiceMessages]);
+  useEffect(() => {
+    if (view !== "voz") {
+      voiceStoppedRef.current = true; voiceBusyRef.current = false;
+      try { recogRef.current?.stop(); } catch {}
+      recogRef.current = null; window.speechSynthesis?.cancel();
+      setVoiceActive(false);
+    }
+  }, [view]);
+
+  const startVoice = useCallback(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { setVoiceStatus("Reconocimiento de voz no soportado"); return; }
+    if (!("speechSynthesis" in window)) { setVoiceStatus("Síntesis de voz no soportada"); return; }
+
+    setVoiceActive(true); setVoiceMessages([]);
+    voiceSessionRef.current = null; voiceBusyRef.current = false; voiceStoppedRef.current = false;
+    setVoiceStatus("Iniciando...");
+
+    const recognition = new SR();
+    recognition.lang = "es-ES"; recognition.continuous = false;
+    recognition.interimResults = false; recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event: any) => {
+      const text = event.results[0][0].transcript;
+      if (!text.trim() || voiceStoppedRef.current) return;
+      setVoiceMessages((p) => [...p, { role: "user", text: text.trim() }]);
+      setVoiceStatus("Procesando..."); voiceBusyRef.current = true;
+
+      (async () => {
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: text.trim(), session_id: voiceSessionRef.current }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const reader = res.body!.getReader(); const dec = new TextDecoder(); let buf = "";
+          let full = "";
+          while (true) {
+            const { value, done } = await reader.read(); if (done) break;
+            buf += dec.decode(value, { stream: true });
+            const lines = buf.split("\n"); buf = lines.pop()!;
+            for (const ln of lines) {
+              if (!ln.startsWith("data: ")) continue;
+              let ev: any; try { ev = JSON.parse(ln.slice(6)); } catch { continue; }
+              if (ev.type === "session") voiceSessionRef.current = ev.session_id;
+              else if (ev.type === "text") full += ev.text;
+            }
+          }
+          if (full && !voiceStoppedRef.current) {
+            setVoiceMessages((p) => [...p, { role: "bot", text: full }]);
+            setVoiceStatus("Hablando...");
+            const u = new SpeechSynthesisUtterance(full);
+            u.lang = "es-ES"; u.rate = 1.1;
+            u.onend = () => {
+              voiceBusyRef.current = false;
+              if (!voiceStoppedRef.current) { setVoiceStatus("Escuchando..."); try { recognition.start(); } catch {} }
+            };
+            window.speechSynthesis.speak(u);
+          } else {
+            voiceBusyRef.current = false;
+            if (!voiceStoppedRef.current) { setVoiceStatus("Escuchando..."); try { recognition.start(); } catch {} }
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setVoiceMessages((p) => [...p, { role: "bot", text: "Error: " + msg }]);
+          voiceBusyRef.current = false;
+          if (!voiceStoppedRef.current) { setVoiceStatus("Escuchando..."); try { recognition.start(); } catch {} }
+        }
+      })();
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error === "no-speech" || event.error === "aborted") {
+        if (!voiceStoppedRef.current && !voiceBusyRef.current) { try { recognition.start(); } catch {} }
+        return;
+      }
+      if (!voiceStoppedRef.current) { setVoiceStatus("Error: " + event.error); voiceStoppedRef.current = true; }
+    };
+
+    recognition.onend = () => {
+      if (!voiceStoppedRef.current && !voiceBusyRef.current) { try { recognition.start(); } catch {} }
+    };
+
+    recogRef.current = recognition;
+    setVoiceStatus("Escuchando...");
+    try { recognition.start(); } catch { setVoiceStatus("Error al iniciar micrófono"); }
+  }, []);
+
+  const stopVoice = useCallback(() => {
+    voiceStoppedRef.current = true; voiceBusyRef.current = false;
+    try { recogRef.current?.stop(); } catch {}
+    recogRef.current = null; window.speechSynthesis?.cancel();
+    setVoiceActive(false); setVoiceStatus("Conversación detenida");
+  }, []);
+
   /* ── Render ─────────────────────────────────────────────────────── */
   return (
     <div style={{ width: "100vw", height: "100vh", background: "#0a0a0a",
@@ -391,9 +605,9 @@ export default function App() {
         </div>
 
         {/* Tab buttons */}
-        {(["terminal", "chat"] as const).map((v) => {
+        {(["terminal", "chat", "voz"] as const).map((v) => {
           const active = view === v;
-          const label  = v === "terminal" ? "▸ TERMINAL" : "◈ CHATBOT";
+          const label  = v === "terminal" ? "▸ TERMINAL" : v === "chat" ? "◈ CHATBOT" : "♪ VOZ";
           return (
             <button key={v} data-testid={`button-nav-${v}`} onClick={() => setView(v)}
               style={{
@@ -461,8 +675,8 @@ export default function App() {
         </div>
 
         {/* Messages */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "20px 0 8px",
-          display: "flex", flexDirection: "column" }}>
+        <div ref={chatMsgsRef} style={{ flex: 1, overflowY: "auto", padding: "20px 0 8px",
+          display: "flex", flexDirection: "column", fontFamily: SANS }}>
           {messages.length === 0 && (
             <div style={{ margin: "auto", textAlign: "center" }}>
               <div style={{ position: "relative", width: 64, height: 64, margin: "0 auto 14px" }}>
@@ -509,10 +723,10 @@ export default function App() {
                 maxWidth: "calc(100% - 48px)",
                 color: m.role === "user" ? "#fff" : "#d0d0d0",
                 fontSize: 13.5, lineHeight: 1.75,
-                wordBreak: "break-word", fontFamily: MONO,
+                wordBreak: "break-word", fontFamily: SANS,
               }}>
                 {m.role === "user" ? (
-                  <span style={{ whiteSpace: "pre-wrap" }}>{m.text}</span>
+                  <span style={{ whiteSpace: "pre-wrap", fontFamily: MONO }}>{m.text}</span>
                 ) : m.html ? (
                   <span dangerouslySetInnerHTML={{ __html: m.html }} />
                 ) : (
@@ -571,6 +785,175 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* ════ VOZ ════ */}
+      <div style={{ flex: view === "voz" ? 1 : 0,
+        display: view === "voz" ? "flex" : "none",
+        flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+
+        <div style={{ background: "#0d0d0d", borderBottom: "1px solid #1a1a1a",
+          padding: "5px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <div style={{ width: 9, height: 9, background: "#cc0000", flexShrink: 0 }} />
+          <span style={{ color: "#333", fontSize: 11, fontWeight: 700,
+            letterSpacing: ".12em", textTransform: "uppercase", fontFamily: MONO }}>
+            Conversación por Voz
+          </span>
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: voiceMessages.length === 0 ? "center" : undefined,
+          overflow: "hidden", padding: "20px 16px" }}>
+
+          {voiceMessages.length > 0 && (
+            <div style={{ flex: 1, overflowY: "auto", width: "100%", maxWidth: 700 }}>
+              {voiceMessages.map((m, i) => (
+                <div key={i} style={{
+                  display: "flex", gap: 8, marginBottom: 12,
+                  flexDirection: m.role === "user" ? "row-reverse" : "row",
+                }}>
+                  <div style={{ color: m.role === "user" ? "#cc0000" : "#666",
+                    fontSize: 11, fontWeight: 700, flexShrink: 0,
+                    minWidth: 20, textAlign: "center" }}>
+                    {m.role === "user" ? "U" : "A"}
+                  </div>
+                  <div style={{
+                    background: m.role === "user" ? "#1a0000" : "#111",
+                    border: m.role === "bot" ? "1px solid #1a1a1a" : "none",
+                    borderLeft: m.role === "bot" ? "3px solid #cc0000" : undefined,
+                    padding: "8px 12px", borderRadius: 4,
+                    color: m.role === "user" ? "#cc0000" : "#d0d0d0",
+                    fontSize: 13, lineHeight: 1.6, fontFamily: MONO,
+                    maxWidth: "80%", wordBreak: "break-word",
+                  }}>
+                    {m.text}
+                  </div>
+                </div>
+              ))}
+              <div ref={voiceMessagesEndRef} />
+            </div>
+          )}
+
+          {voiceMessages.length === 0 && !voiceActive && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ position: "relative", width: 72, height: 72, margin: "0 auto 16px" }}>
+                <div style={{ position: "absolute", inset: 0, border: "3px solid #cc0000" }} />
+                <div style={{ position: "absolute", top: 8, left: 8, right: 8, bottom: 8,
+                  background: "#cc0000", display: "grid", placeItems: "center" }}>
+                  <span style={{ color: "#fff", fontSize: 26, fontWeight: 900 }}>♪</span>
+                </div>
+              </div>
+              <p style={{ color: "#2a2a2a", fontSize: 10, fontWeight: 700,
+                letterSpacing: ".18em", textTransform: "uppercase", fontFamily: MONO }}>
+                Presiona INICIAR para conversar por voz
+              </p>
+            </div>
+          )}
+
+          {voiceMessages.length === 0 && voiceActive && (
+            <div style={{ textAlign: "center" }}>
+              <p style={{ color: "#555", fontSize: 11, fontWeight: 700,
+                letterSpacing: ".12em", textTransform: "uppercase", fontFamily: MONO }}>
+                {voiceStatus}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom bar */}
+        <div style={{ borderTop: "2px solid #cc0000", padding: "16px",
+          background: "#0a0a0a", display: "flex", flexDirection: "column",
+          alignItems: "center", gap: 10, flexShrink: 0 }}>
+          {voiceActive && (
+            <span style={{ color: "#555", fontSize: 10, fontWeight: 700,
+              letterSpacing: ".12em", fontFamily: MONO }}>
+              {voiceStatus}
+            </span>
+          )}
+          <button onClick={voiceActive ? stopVoice : startVoice}
+            style={{
+              background: voiceActive ? "transparent" : "#cc0000",
+              color: voiceActive ? "#cc0000" : "#fff",
+              border: voiceActive ? "2px solid #cc0000" : "none",
+              cursor: "pointer", padding: "12px 40px",
+              fontSize: 13, fontWeight: 700, letterSpacing: ".15em",
+              fontFamily: MONO, textTransform: "uppercase",
+              transition: "all .15s",
+            }}>
+            {voiceActive ? "■ DETENER" : "● INICIAR"}
+          </button>
+        </div>
+      </div>
+
+      {/* ════ MODAL ════ */}
+      {modalOpen && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1000,
+          background: "rgba(0,0,0,.85)", display: "flex",
+          flexDirection: "column", alignItems: "center",
+          justifyContent: "center", padding: 20, fontFamily: MONO,
+        }} onClick={() => setModalOpen(false)}>
+          <div style={{
+            background: "#111", border: "2px solid #cc0000",
+            maxWidth: 900, width: "100%", maxHeight: "90vh",
+            display: "flex", flexDirection: "column",
+          }} onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{
+              display: "flex", justifyContent: "space-between",
+              alignItems: "center", padding: "12px 16px",
+              borderBottom: "1px solid #1a1a1a", flexShrink: 0,
+            }}>
+              <span style={{ color: "#cc0000", fontWeight: 700, fontSize: 11,
+                letterSpacing: ".12em", textTransform: "uppercase" }}>
+                {modalTitle || "FUENTE"}
+              </span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <a href={modalUrl} target="_blank" rel="noopener"
+                  style={{
+                    background: "#cc0000", color: "#fff", border: "none",
+                    padding: "6px 12px", cursor: "pointer", fontSize: 10,
+                    fontWeight: 700, letterSpacing: ".1em",
+                    textTransform: "uppercase", textDecoration: "none",
+                  }}>
+                  ABRIR ORIGINAL
+                </a>
+                <button onClick={() => setModalOpen(false)}
+                  style={{ background: "none", border: "none", color: "#555",
+                    cursor: "pointer", fontSize: 18 }}>
+                  ✕
+                </button>
+              </div>
+            </div>
+            {/* Content */}
+            <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+              {modalLoading && (
+                <div style={{ display: "grid", placeItems: "center",
+                  height: 300, color: "#666", fontSize: 12,
+                  letterSpacing: ".1em", textTransform: "uppercase" }}>
+                  Cargando contenido...
+                </div>
+              )}
+              {!modalLoading && modalError && (
+                <div style={{ padding: 32, textAlign: "center" }}>
+                  <p style={{ color: "#e83030", fontSize: 12, marginBottom: 12 }}>
+                    {modalError}
+                  </p>
+                  <a href={modalUrl} target="_blank" rel="noopener"
+                    style={{ color: "#4a9eff", fontSize: 11, textDecoration: "underline" }}>
+                    Abrir directamente en nueva pestaña →
+                  </a>
+                </div>
+              )}
+              {!modalLoading && !modalError && modalHtml && (
+                <div style={{ background: "#fff", color: "#111",
+                  fontSize: 14, lineHeight: 1.7 }}
+                  dangerouslySetInnerHTML={{ __html: modalHtml }} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{STYLES}</style>
     </div>
