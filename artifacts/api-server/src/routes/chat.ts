@@ -4,8 +4,33 @@ import type { Request, Response } from "express";
 
 const router = Router();
 
+const SYSTEM_PROMPT = `Sos un asistente periodista con perspectiva de clase. Reglas estrictas:
+- Siempre lo más breve posible. Sin rodeos.
+- No declarar: analizar y comunicar.
+- Datos chequeados. Énfasis en cifras, números, nombres propios, fechas, porcentajes.
+- Usar markdown: negrita para datos clave, listas para enumerar, encabezados solo si son necesarios.
+- Citar fuentes con links en markdown así: [Fuente](url). Las citas van al final, en tamaño pequeño con HTML: <small>[Fuente](url)</small>
+- Ser consciente de la fecha y hora actual (se indica en cada mensaje).
+- Perspectiva de clase: jerarquizar quién gana y quién pierde en cada hecho.
+- Sin frases de relleno, sin introducción, ir directo al análisis.`;
+
 function sse(obj: Record<string, unknown>): string {
   return `data: ${JSON.stringify(obj)}\n\n`;
+}
+
+function buildMessage(message: string, isNewSession: boolean): string {
+  const now = new Date().toLocaleString("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    dateStyle: "full",
+    timeStyle: "short",
+  });
+
+  if (isNewSession) {
+    return `[INSTRUCCIONES DEL SISTEMA]\n${SYSTEM_PROMPT}\n\nFecha y hora actual: ${now}\n\n[PREGUNTA DEL USUARIO]\n${message}`;
+  }
+
+  // For ongoing sessions, just remind of datetime to keep context fresh
+  return `[Fecha y hora actual: ${now}]\n\n${message}`;
 }
 
 router.post("/chat", (req: Request, res: Response) => {
@@ -19,9 +44,12 @@ router.post("/chat", (req: Request, res: Response) => {
     return;
   }
 
+  const isNewSession = !session_id;
+  const fullMessage = buildMessage(message.trim(), isNewSession);
+
   const args = ["run", "--format", "json"];
   if (session_id) args.push("--session", session_id);
-  args.push(message.trim());
+  args.push(fullMessage);
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -34,12 +62,7 @@ router.post("/chat", (req: Request, res: Response) => {
   try {
     proc = spawn("opencode", args, { stdio: ["ignore", "pipe", "pipe"] });
   } catch (err: unknown) {
-    res.write(
-      sse({
-        type: "error",
-        message: "opencode not found: " + String(err),
-      }),
-    );
+    res.write(sse({ type: "error", message: "opencode not found: " + String(err) }));
     res.end();
     return;
   }
@@ -65,31 +88,21 @@ router.post("/chat", (req: Request, res: Response) => {
 
       const part = (event["part"] ?? {}) as Record<string, unknown>;
 
-      if (
-        event["type"] === "text" &&
-        part["type"] === "text" &&
-        part["text"]
-      ) {
+      if (event["type"] === "text" && part["type"] === "text" && part["text"]) {
         res.write(sse({ type: "text", text: part["text"] }));
       } else if (event["type"] === "tool_use" && part["tool"]) {
-        res.write(
-          sse({ type: "text", text: `\n*[tool: ${part["tool"]}]*\n` }),
-        );
+        res.write(sse({ type: "text", text: `\n*[herramienta: ${part["tool"]}]*\n` }));
       }
     }
   });
 
   let stderrBuf = "";
   proc.stderr!.setEncoding("utf8");
-  proc.stderr!.on("data", (d: string) => {
-    stderrBuf += d;
-  });
+  proc.stderr!.on("data", (d: string) => { stderrBuf += d; });
 
   proc.on("close", (code: number | null) => {
     if (code !== 0 && stderrBuf.trim()) {
-      res.write(
-        sse({ type: "error", message: stderrBuf.trim().slice(0, 400) }),
-      );
+      res.write(sse({ type: "error", message: stderrBuf.trim().slice(0, 400) }));
     }
     res.write(sse({ type: "done" }));
     res.end();
@@ -100,11 +113,7 @@ router.post("/chat", (req: Request, res: Response) => {
     res.end();
   });
 
-  res.on("close", () => {
-    try {
-      proc.kill();
-    } catch {}
-  });
+  res.on("close", () => { try { proc.kill(); } catch {} });
 });
 
 export default router;
