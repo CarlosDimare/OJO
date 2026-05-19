@@ -314,7 +314,8 @@ const STYLES = `
 
 /* ══════════════════════════════════════════════════════════════════ */
 export default function App() {
-  const [view, setView]       = useState<View>("terminal");
+  const [view, setView]       = useState<View>("chat");
+  const [menuOpen, setMenuOpen] = useState(false);
   const clock                 = useClock();
 
   /* terminal */
@@ -330,9 +331,15 @@ export default function App() {
   const [input, setInput]         = useState("");
   const [busy, setBusy]           = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<number | null>(null);
   const msgsEndRef               = useRef<HTMLDivElement>(null);
   const inputRef                 = useRef<HTMLTextAreaElement>(null);
   const chatMsgsRef              = useRef<HTMLDivElement>(null);
+
+  /* history */
+  const [historyOpen, setHistoryOpen]     = useState(false);
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   /* modal */
   const [modalOpen, setModalOpen]       = useState(false);
@@ -455,11 +462,11 @@ export default function App() {
     if (!text || busy) return;
     setBusy(true); setInput("");
     setMessages((p) => [...p, { role: "user", text }, { role: "bot", text: "", html: "" }]);
-    let full = ""; let cur = sessionId;
+    let full = ""; let cur = sessionId; let cid = conversationId;
     try {
       const res = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, session_id: cur }),
+        body: JSON.stringify({ message: text, session_id: cur, conversation_id: cid }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const reader = res.body!.getReader(); const dec = new TextDecoder(); let buf = "";
@@ -472,6 +479,7 @@ export default function App() {
           let ev: Record<string, unknown>;
           try { ev = JSON.parse(ln.slice(6)) as Record<string, unknown>; } catch { continue; }
           if (ev["type"] === "session") { cur = ev["session_id"] as string; setSessionId(cur); }
+          else if (ev["type"] === "conversation") { cid = ev["conversation_id"] as number; setConversationId(cid); }
           else if (ev["type"] === "text") {
             full += ev["text"] as string;
             setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: full, html: md(full) }; return n; });
@@ -485,7 +493,7 @@ export default function App() {
       const msg = err instanceof Error ? err.message : String(err);
       setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: "", html: `<span style="color:#e83030">⚠ ${esc(msg)}</span>` }; return n; });
     } finally { setBusy(false); setTimeout(() => inputRef.current?.focus(), 50); }
-  }, [input, busy, sessionId]);
+  }, [input, busy, sessionId, conversationId]);
 
   /* ── Voice chat ──────────────────────────────────────────────────── */
   useEffect(() => { voiceMessagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [voiceMessages]);
@@ -584,6 +592,50 @@ export default function App() {
     setVoiceActive(false); setVoiceStatus("Conversación detenida");
   }, []);
 
+  /* ── History ──────────────────────────────────────────────────────── */
+  const fetchConversations = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const r = await fetch("/api/conversations");
+      if (r.ok) setConversations(await r.json());
+    } catch {} finally { setHistoryLoading(false); }
+  }, []);
+
+  const loadConversation = useCallback(async (id: number) => {
+    try {
+      const r = await fetch(`/api/conversations/${id}`);
+      if (!r.ok) return;
+      const data = await r.json();
+      setMessages(data.messages.map((m: any) => ({
+        role: m.role as "user" | "bot",
+        text: m.content,
+        html: m.role === "bot" ? md(m.content) : undefined,
+      })));
+      setConversationId(id);
+      setSessionId(data.sessionId);
+      setHistoryOpen(false);
+      if (view !== "chat") setView("chat");
+    } catch {}
+  }, [view]);
+
+  const deleteConversation = useCallback(async (id: number) => {
+    try {
+      await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+      setConversations((p) => p.filter((c: any) => c.id !== id));
+      if (conversationId === id) {
+        setConversationId(null);
+        setMessages([]);
+        setSessionId(null);
+      }
+    } catch {}
+  }, [conversationId]);
+
+  const newConversation = useCallback(() => {
+    setConversationId(null);
+    setMessages([]);
+    setSessionId(null);
+  }, []);
+
   /* ── Render ─────────────────────────────────────────────────────── */
   return (
     <div style={{ width: "100vw", height: "100vh", background: "#0a0a0a",
@@ -591,41 +643,76 @@ export default function App() {
 
       {/* ════ NAV BAR ════ */}
       <nav style={{ flexShrink: 0, background: "#0a0a0a", borderBottom: "3px solid #cc0000",
-        display: "flex", alignItems: "stretch", height: 48 }}>
+        display: "flex", alignItems: "stretch", height: 48, position: "relative" }}>
 
-        {/* Red stripe + star */}
+        {/* Red stripe */}
         <div style={{ width: 6, background: "#cc0000", flexShrink: 0 }} />
+
+        {/* Star — toggle menu */}
         <div style={{ paddingLeft: 14, paddingRight: 18, display: "flex",
-          alignItems: "center", borderRight: "2px solid #1a1a1a" }}>
-          <div style={{ width: 20, height: 20, background: "#cc0000",
+          alignItems: "center", borderRight: "2px solid #1a1a1a", cursor: "pointer",
+          position: "relative" }}
+          onClick={() => setMenuOpen((p) => !p)}
+          onMouseLeave={() => setMenuOpen(false)}>
+          <div style={{ width: 24, height: 24, background: "#cc0000",
             display: "grid", placeItems: "center", transform: "rotate(45deg)", flexShrink: 0 }}>
-            <span style={{ color: "#fff", fontSize: 12, fontWeight: 900,
-              transform: "rotate(-45deg)", display: "block" }}>✦</span>
+            <img src="/ESTRELLA.svg" alt="✦"
+              style={{ width: 16, height: 16, transform: "rotate(-45deg)", display: "block" }} />
           </div>
+
+          {/* Dropdown menu */}
+          {menuOpen && (
+            <div style={{
+              position: "absolute", top: 44, left: 0, zIndex: 999,
+              background: "#111", border: "2px solid #cc0000",
+              minWidth: 180, fontFamily: MONO,
+            }}>
+              {[
+                { id: "chat" as const, label: "◈ PERIODISTA" },
+                { id: "voz" as const,  label: "♪ VOZ" },
+                { id: "terminal" as const, label: "▸ TERMINAL" },
+                { id: null, label: "─" },
+                { id: "new" as any, label: "◈ NUEVA CONVERSACIÓN" },
+                { id: "history" as any, label: "☰ HISTORIAL" },
+              ].map((item: any, idx) => {
+                if (item.label === "─") {
+                  return <div key={idx} style={{ height: 1, background: "#222", margin: "4px 0" }} />;
+                }
+                const isView = item.id === "chat" || item.id === "voz" || item.id === "terminal";
+                const active = isView && view === item.id;
+                return (
+                  <button key={item.id} onClick={() => {
+                    setMenuOpen(false);
+                    if (item.id === "new") { newConversation(); setView("chat"); }
+                    else if (item.id === "history") { setHistoryOpen(true); fetchConversations(); }
+                    else { setView(item.id); }
+                  }}
+                    style={{
+                      display: "block", width: "100%", border: "none",
+                      background: active ? "#cc0000" : "transparent",
+                      color: active ? "#fff" : "#555",
+                      cursor: "pointer", padding: "10px 18px", fontSize: 11,
+                      fontWeight: 700, letterSpacing: ".12em",
+                      textTransform: "uppercase", textAlign: "left",
+                      fontFamily: MONO, transition: "all .1s",
+                    }}
+                    onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "#1a1a1a"; }}
+                    onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}>
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Tab buttons */}
-        {(["terminal", "chat", "voz"] as const).map((v) => {
-          const active = view === v;
-          const label  = v === "terminal" ? "▸ TERMINAL" : v === "chat" ? "◈ CHATBOT" : "♪ VOZ";
-          return (
-            <button key={v} data-testid={`button-nav-${v}`} onClick={() => setView(v)}
-              style={{
-                background: active ? "#cc0000" : "transparent",
-                color: active ? "#fff" : "#555",
-                border: "none", cursor: "pointer", padding: "0 24px", fontSize: 11,
-                fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase",
-                borderRight: "2px solid #1a1a1a", fontFamily: MONO,
-                position: "relative", transition: "all .15s",
-              }}
-              onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = "#cc0000"; }}
-              onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = "#555"; }}
-            >
-              {label}
-              {active && <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, background: "#fff" }} />}
-            </button>
-          );
-        })}
+        {/* Active view label */}
+        <div style={{ display: "flex", alignItems: "center", paddingLeft: 16 }}>
+          <span style={{ color: "#cc0000", fontSize: 11, fontWeight: 700,
+            letterSpacing: ".12em", textTransform: "uppercase", fontFamily: MONO }}>
+            {view === "chat" ? "◈ PERIODISTA" : view === "voz" ? "♪ VOZ" : "▸ TERMINAL"}
+          </span>
+        </div>
 
         {/* Clock */}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", paddingRight: 16 }}>
@@ -640,16 +727,6 @@ export default function App() {
       <div style={{ flex: view === "terminal" ? 1 : 0,
         display: view === "terminal" ? "flex" : "none",
         flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
-        <div style={{ background: "#0d0d0d", borderBottom: "1px solid #1a1a1a",
-          padding: "5px 14px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {["#cc0000", "#c8a030", "#5a9a3a"].map((c) => (
-            <div key={c} style={{ width: 9, height: 9, borderRadius: "50%", background: c }} />
-          ))}
-          <span style={{ color: "#333", fontSize: 11, fontWeight: 700,
-            letterSpacing: ".1em", textTransform: "uppercase", fontFamily: MONO }}>
-            bash — ~/workspace
-          </span>
-        </div>
         <div ref={terminalRef} data-testid="terminal-container"
           style={{ flex: 1, padding: "6px 4px", overflow: "hidden" }} />
       </div>
@@ -658,21 +735,6 @@ export default function App() {
       <div style={{ flex: view === "chat" ? 1 : 0,
         display: view === "chat" ? "flex" : "none",
         flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
-
-        <div style={{ background: "#0d0d0d", borderBottom: "1px solid #1a1a1a",
-          padding: "5px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <div style={{ width: 9, height: 9, background: "#cc0000", flexShrink: 0 }} />
-          <span style={{ color: "#333", fontSize: 11, fontWeight: 700,
-            letterSpacing: ".12em", textTransform: "uppercase", fontFamily: MONO }}>
-             Modo Periodista
-          </span>
-          {sessionId && (
-            <span style={{ marginLeft: "auto", color: "#333", fontSize: 10,
-              fontWeight: 700, letterSpacing: ".08em", fontFamily: MONO }}>
-              [sesión activa]
-            </span>
-          )}
-        </div>
 
         {/* Messages */}
         <div ref={chatMsgsRef} style={{ flex: 1, overflowY: "auto", padding: "20px 0 8px",
@@ -790,15 +852,6 @@ export default function App() {
       <div style={{ flex: view === "voz" ? 1 : 0,
         display: view === "voz" ? "flex" : "none",
         flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
-
-        <div style={{ background: "#0d0d0d", borderBottom: "1px solid #1a1a1a",
-          padding: "5px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <div style={{ width: 9, height: 9, background: "#cc0000", flexShrink: 0 }} />
-          <span style={{ color: "#333", fontSize: 11, fontWeight: 700,
-            letterSpacing: ".12em", textTransform: "uppercase", fontFamily: MONO }}>
-            Conversación por Voz
-          </span>
-        </div>
 
         {/* Content */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column",
@@ -950,6 +1003,89 @@ export default function App() {
                   fontSize: 14, lineHeight: 1.7 }}
                   dangerouslySetInnerHTML={{ __html: modalHtml }} />
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════ HISTORY MODAL ════ */}
+      {historyOpen && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 999,
+          background: "rgba(0,0,0,.85)", display: "flex",
+          flexDirection: "column", alignItems: "center",
+          justifyContent: "center", padding: 20, fontFamily: MONO,
+        }} onClick={() => setHistoryOpen(false)}>
+          <div style={{
+            background: "#111", border: "2px solid #cc0000",
+            maxWidth: 600, width: "100%", maxHeight: "80vh",
+            display: "flex", flexDirection: "column",
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{
+              display: "flex", justifyContent: "space-between",
+              alignItems: "center", padding: "12px 16px",
+              borderBottom: "1px solid #1a1a1a", flexShrink: 0,
+            }}>
+              <span style={{ color: "#cc0000", fontWeight: 700, fontSize: 11,
+                letterSpacing: ".12em", textTransform: "uppercase" }}>
+                ☰ HISTORIAL
+              </span>
+              <button onClick={() => setHistoryOpen(false)}
+                style={{ background: "none", border: "none", color: "#555",
+                  cursor: "pointer", fontSize: 18 }}>
+                ✕
+              </button>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+              {historyLoading && (
+                <div style={{ textAlign: "center", color: "#555", padding: 20, fontSize: 11,
+                  letterSpacing: ".1em", textTransform: "uppercase" }}>
+                  Cargando...
+                </div>
+              )}
+              {!historyLoading && conversations.length === 0 && (
+                <div style={{ textAlign: "center", color: "#333", padding: 20, fontSize: 11,
+                  letterSpacing: ".1em", textTransform: "uppercase" }}>
+                  Sin conversaciones guardadas
+                </div>
+              )}
+              {!historyLoading && conversations.map((c: any) => (
+                <div key={c.id} style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "8px 16px", borderBottom: "1px solid #1a1a1a",
+                }}>
+                  <div style={{ flex: 1, overflow: "hidden" }}>
+                    <div style={{ color: "#d0d0d0", fontSize: 12, fontWeight: 700,
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {c.title}
+                    </div>
+                    <div style={{ color: "#555", fontSize: 10, marginTop: 2 }}>
+                      {new Date(c.createdAt).toLocaleString("es-AR", {
+                        day: "2-digit", month: "2-digit", year: "numeric",
+                        hour: "2-digit", minute: "2-digit",
+                      })}
+                    </div>
+                  </div>
+                  <button onClick={() => loadConversation(c.id)}
+                    style={{
+                      background: "#cc0000", color: "#fff", border: "none",
+                      padding: "5px 10px", cursor: "pointer", fontSize: 9,
+                      fontWeight: 700, letterSpacing: ".1em",
+                      textTransform: "uppercase", flexShrink: 0,
+                    }}>
+                    CARGAR
+                  </button>
+                  <button onClick={() => deleteConversation(c.id)}
+                    style={{
+                      background: "transparent", color: "#555", border: "1px solid #333",
+                      padding: "5px 10px", cursor: "pointer", fontSize: 9,
+                      fontWeight: 700, letterSpacing: ".1em",
+                      textTransform: "uppercase", flexShrink: 0,
+                    }}>
+                    BORRAR
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         </div>
