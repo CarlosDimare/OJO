@@ -4,13 +4,24 @@
   box-sizing: border-box;
 }
 
-html,
+html {
+  /* dvh tracks the usable viewport as Chrome's address bar appears/hides */
+  height: 100dvh;
+  height: -webkit-fill-available;
+}
+
 body,
 #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
   background: #0d1117;
+}
+
+/* Prevent elastic overscroll bounce on iOS/Android */
+body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 .xterm {

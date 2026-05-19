@@ -649,7 +649,7 @@ export default function App() {
 
   /* ── Render ─────────────────────────────────────────────────────── */
   return (
-    <div style={{ width: "100vw", height: "100vh", background: "#0a0a0a",
+    <div style={{ width: "100vw", height: "100dvh", background: "#0a0a0a",
       display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: MONO }}>
 
       {/* ════ NAV BAR ════ */}
