@@ -120,15 +120,38 @@ router.post("/chat", async (req: Request, res: Response) => {
       try { event = JSON.parse(line) as Record<string, unknown>; }
       catch { continue; }
 
+      const evType = event["type"] as string;
+
       if (!sessionSent && event["sessionID"]) {
         res.write(sse({ type: "session", session_id: event["sessionID"] }));
         sessionSent = true;
       }
 
+      if (evType === "step_start") {
+        res.write(sse({ type: "status", status: "..." }));
+        continue;
+      }
+
+      if (evType === "tool_use") {
+        const part = (event["part"] ?? {}) as Record<string, unknown>;
+        const tool = (part["tool"] as string) || "";
+        const label: Record<string, string> = {
+          websearch: "Investigando...",
+          webfetch: "Analizando fuentes...",
+          read: "Leyendo documentos...",
+          read_file: "Leyendo documentos...",
+          write_file: "Redactando...",
+          edit: "Redactando...",
+          bash: "Ejecutando...",
+        };
+        res.write(sse({ type: "status", status: label[tool] || "Procesando..." }));
+        continue;
+      }
+
       const part = (event["part"] ?? {}) as Record<string, unknown>;
 
       // Only emit text events — skip tool_use noise
-      if (event["type"] === "text" && part["type"] === "text" && part["text"]) {
+      if (evType === "text" && part["type"] === "text" && part["text"]) {
         const text = part["text"] as string;
         botContent += text;
         res.write(sse({ type: "text", text }));

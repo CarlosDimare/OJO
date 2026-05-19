@@ -332,6 +332,7 @@ export default function App() {
   const [busy, setBusy]           = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<number | null>(null);
+  const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
   const msgsEndRef               = useRef<HTMLDivElement>(null);
   const inputRef                 = useRef<HTMLTextAreaElement>(null);
   const chatMsgsRef              = useRef<HTMLDivElement>(null);
@@ -460,7 +461,7 @@ export default function App() {
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || busy) return;
-    setBusy(true); setInput("");
+    setBusy(true); setInput(""); setThinkingStatus("...");
     setMessages((p) => [...p, { role: "user", text }, { role: "bot", text: "", html: "" }]);
     let full = ""; let cur = sessionId; let cid = conversationId;
     try {
@@ -480,10 +481,13 @@ export default function App() {
           try { ev = JSON.parse(ln.slice(6)) as Record<string, unknown>; } catch { continue; }
           if (ev["type"] === "session") { cur = ev["session_id"] as string; setSessionId(cur); }
           else if (ev["type"] === "conversation") { cid = ev["conversation_id"] as number; setConversationId(cid); }
+          else if (ev["type"] === "status") { setThinkingStatus(ev["status"] as string); }
           else if (ev["type"] === "text") {
+            setThinkingStatus(null);
             full += ev["text"] as string;
             setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: full, html: md(full) }; return n; });
           } else if (ev["type"] === "error") {
+            setThinkingStatus(null);
             setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: "", html: `<span style="color:#e83030">⚠ ${esc(ev["message"] as string)}</span>` }; return n; });
           }
         }
@@ -491,6 +495,7 @@ export default function App() {
       if (!full) setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: "—", html: "—" }; return n; });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      setThinkingStatus(null);
       setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: "", html: `<span style="color:#e83030">⚠ ${esc(msg)}</span>` }; return n; });
     } finally { setBusy(false); setTimeout(() => inputRef.current?.focus(), 50); }
   }, [input, busy, sessionId, conversationId]);
@@ -791,6 +796,11 @@ export default function App() {
                   <span style={{ whiteSpace: "pre-wrap", fontFamily: MONO }}>{m.text}</span>
                 ) : m.html ? (
                   <span dangerouslySetInnerHTML={{ __html: m.html }} />
+                ) : thinkingStatus ? (
+                  <span style={{ color: "#666", fontSize: 11, fontWeight: 700,
+                    letterSpacing: ".08em", fontFamily: MONO }}>
+                    {thinkingStatus}
+                  </span>
                 ) : (
                   <span style={{ display: "inline-flex", gap: 5, alignItems: "center" }}>
                     {[0, .25, .5].map((d, j) => (
