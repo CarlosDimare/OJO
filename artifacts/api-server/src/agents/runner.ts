@@ -11,12 +11,6 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 const LOCAL_BIN = resolve(__dir, "../../node_modules/.bin/opencode");
 const OPENCODE = existsSync(LOCAL_BIN) ? LOCAL_BIN : "opencode";
 
-const now = new Date().toLocaleString("es-AR", {
-  timeZone: "America/Argentina/Buenos_Aires",
-  dateStyle: "full",
-  timeStyle: "short",
-});
-
 interface AccionRaw {
   pais?: string;
   bandera?: string;
@@ -80,6 +74,11 @@ function normalize(accion: AccionRaw): AccionRaw {
 }
 
 export async function runAgent(agent: AgentConfig): Promise<{ ok: boolean; count: number; error?: string }> {
+  const now = new Date().toLocaleString("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    dateStyle: "full",
+    timeStyle: "short",
+  });
   const fullPrompt = `Fecha y hora actual: ${now}\n\n${agent.systemPrompt}\n\nBuscá acciones colectivas RECIENTES para esta sección: ${agent.label}`;
   const args = ["run", "--format", "json", fullPrompt];
 
