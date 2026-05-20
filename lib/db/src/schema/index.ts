@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
 
 export const conversationsTable = pgTable("conversations", {
   id: serial("id").primaryKey(),
@@ -16,4 +16,24 @@ export const messagesTable = pgTable("messages", {
   role: text("role").notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const accionesTable = pgTable("acciones_colectivas", {
+  id: serial("id").primaryKey(),
+  seccion: text("seccion").notNull(),
+  pais: text("pais").notNull(),
+  bandera: text("bandera").notNull(),
+  hora: text("hora").notNull(),
+  fecha: text("fecha").notNull(),
+  lugar: text("lugar").notNull(),
+  tipoAccion: text("tipo_accion").notNull(),
+  organizaciones: jsonb("organizaciones").notNull().$type<string[]>(),
+  motivo: text("motivo").notNull(),
+  status: text("status").notNull().default("programado"),
+  fuentes: jsonb("fuentes").notNull().$type<{ nombre: string; url: string }[]>(),
+  ultimasNoticias: jsonb("ultimas_noticias").$type<{ titular: string; url: string; fuente: string }[]>(),
+  lat: text("lat"),
+  lng: text("lng"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
