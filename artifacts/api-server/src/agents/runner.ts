@@ -5,6 +5,7 @@ import { existsSync } from "fs";
 import { db, accionesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import { pushActivity } from "./activity";
 import type { AgentConfig } from "./prompts";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -83,6 +84,7 @@ export async function runAgent(agent: AgentConfig): Promise<{ ok: boolean; count
   const args = ["run", "--format", "json", fullPrompt];
 
   logger.info({ agent: agent.id }, "Agent starting");
+  pushActivity({ agentId: agent.id, agentLabel: agent.label, time: new Date().toLocaleTimeString("es-AR"), msg: "Iniciando búsqueda...", type: "step" });
 
   return new Promise((resolve) => {
     const proc = spawn(OPENCODE, args, {
@@ -91,6 +93,7 @@ export async function runAgent(agent: AgentConfig): Promise<{ ok: boolean; count
 
     const killTimer = setTimeout(() => {
       proc.kill("SIGKILL");
+      pushActivity({ agentId: agent.id, agentLabel: agent.label, time: new Date().toLocaleTimeString("es-AR"), msg: "TimeOut — no respondió en 30s", type: "error" });
       logger.warn({ agent: agent.id }, "Agent timed out after 30s");
     }, 30_000);
 
@@ -104,8 +107,27 @@ export async function runAgent(agent: AgentConfig): Promise<{ ok: boolean; count
         if (!line) continue;
         try {
           const event = JSON.parse(line) as Record<string, unknown>;
+          const evType = event["type"] as string;
           const part = (event["part"] ?? {}) as Record<string, unknown>;
-          if (event["type"] === "text" && part["type"] === "text" && part["text"]) {
+
+          if (evType === "step_start") {
+            pushActivity({ agentId: agent.id, agentLabel: agent.label, time: new Date().toLocaleTimeString("es-AR"), msg: "Pensando...", type: "step" });
+            continue;
+          }
+
+          if (evType === "tool_use") {
+            const tool = (part["tool"] as string) || "";
+            const label: Record<string, string> = {
+              websearch: "Buscando en la web...",
+              webfetch: "Analizando fuente...",
+              read: "Leyendo documento...",
+              read_file: "Leyendo documento...",
+            };
+            pushActivity({ agentId: agent.id, agentLabel: agent.label, time: new Date().toLocaleTimeString("es-AR"), msg: label[tool] || `Ejecutando: ${tool}...`, type: "tool" });
+            continue;
+          }
+
+          if (evType === "text" && part["type"] === "text" && part["text"]) {
             botText += part["text"] as string;
           }
         } catch {}
@@ -117,12 +139,17 @@ export async function runAgent(agent: AgentConfig): Promise<{ ok: boolean; count
 
     proc.on("close", async (code) => {
       clearTimeout(killTimer);
+
+      const t = new Date().toLocaleTimeString("es-AR");
+
       if (code !== 0 && stderrBuf.trim()) {
+        pushActivity({ agentId: agent.id, agentLabel: agent.label, time: t, msg: "Error en ejecución", type: "error" });
         logger.error({ agent: agent.id, stderr: stderrBuf.trim().slice(0, 300) }, "Agent error");
       }
 
       const raw = extractJSON(botText);
       if (raw.length === 0) {
+        pushActivity({ agentId: agent.id, agentLabel: agent.label, time: t, msg: "No se encontraron acciones", type: "done" });
         logger.warn({ agent: agent.id, text: botText.slice(0, 200) }, "Agent returned no parseable data");
         resolve({ ok: false, count: 0, error: "No se pudo extraer JSON de la respuesta" });
         return;
@@ -153,10 +180,12 @@ export async function runAgent(agent: AgentConfig): Promise<{ ok: boolean; count
           await db.insert(accionesTable).values(values);
         }
 
+        pushActivity({ agentId: agent.id, agentLabel: agent.label, time: t, msg: `${normalized.length} acciones publicadas`, type: "done" });
         logger.info({ agent: agent.id, count: normalized.length }, "Agent completed");
         resolve({ ok: true, count: normalized.length });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        pushActivity({ agentId: agent.id, agentLabel: agent.label, time: t, msg: `Error DB: ${msg.slice(0, 60)}`, type: "error" });
         logger.error({ agent: agent.id, error: msg }, "Agent DB error");
         resolve({ ok: false, count: 0, error: msg });
       }
@@ -164,6 +193,7 @@ export async function runAgent(agent: AgentConfig): Promise<{ ok: boolean; count
 
     proc.on("error", (err) => {
       clearTimeout(killTimer);
+      pushActivity({ agentId: agent.id, agentLabel: agent.label, time: new Date().toLocaleTimeString("es-AR"), msg: `Error: ${err.message.slice(0, 60)}`, type: "error" });
       logger.error({ agent: agent.id, error: err.message }, "Agent spawn error");
       resolve({ ok: false, count: 0, error: err.message });
     });

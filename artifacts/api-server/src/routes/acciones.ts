@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { db, accionesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { runAllAgents, runAgentById, getStatus, setSchedulerEnabled } from "../agents/scheduler";
+import { getActivity } from "../agents/activity";
 
 const router = Router();
 
@@ -77,6 +78,11 @@ router.post("/agentes/toggle", (req: Request, res: Response) => {
     setSchedulerEnabled(enabled);
   }
   res.json(getStatus());
+});
+
+// GET /api/agentes/actividad
+router.get("/agentes/actividad", (_req: Request, res: Response) => {
+  res.json(getActivity(30));
 });
 
 export default router;

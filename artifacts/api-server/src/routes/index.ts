@@ -4,6 +4,7 @@ import chatRouter from "./chat";
 import fetchProxyRouter from "./fetch-proxy";
 import conversationsRouter from "./conversations";
 import accionesRouter from "./acciones";
+import redaccionRouter from "./redaccion";
 
 const router: IRouter = Router();
 
@@ -12,5 +13,6 @@ router.use(chatRouter);
 router.use(fetchProxyRouter);
 router.use(conversationsRouter);
 router.use(accionesRouter);
+router.use(redaccionRouter);
 
 export default router;

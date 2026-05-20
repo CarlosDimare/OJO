@@ -18,6 +18,16 @@ export const messagesTable = pgTable("messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const redaccionAgentesTable = pgTable("redaccion_agentes", {
+  id: serial("id").primaryKey(),
+  nombre: text("nombre").notNull(),
+  tareas: jsonb("tareas").notNull().$type<string[]>(),
+  agenteId: text("agente_id"),
+  activo: integer("activo").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const accionesTable = pgTable("acciones_colectivas", {
   id: serial("id").primaryKey(),
   seccion: text("seccion").notNull(),

@@ -262,7 +262,15 @@ function useClock(): string {
 
 interface ChatMessage { role: "user" | "bot"; text: string; html?: string; }
 interface VoiceMessage { role: "user" | "bot"; text: string; }
-type View = "terminal" | "chat" | "voz" | "portal";
+type View = "terminal" | "chat" | "voz" | "portal" | "redaccion";
+
+interface ActivityEntry {
+  agentId: string;
+  agentLabel: string;
+  time: string;
+  msg: string;
+  type: "step" | "tool" | "done" | "error";
+}
 
 interface Accion {
   id: number;
@@ -388,6 +396,23 @@ export default function App() {
 
   /* agent status */
   const [agentStatus, setAgentStatus] = useState<{ enabled: boolean; running: string[]; scheduled: boolean } | null>(null);
+  const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
+  const [activityOpen, setActivityOpen] = useState(false);
+
+  /* redaccion */
+  const [redaccionAgentes, setRedaccionAgentes] = useState<any[]>([]);
+  const [editingName, setEditingName] = useState<number | null>(null);
+  const [editNameValue, setEditNameValue] = useState("");
+  const [editingTask, setEditingTask] = useState<string | null>(null);
+  const [editTaskValue, setEditTaskValue] = useState("");
+
+  /* jefe editor */
+  interface JefeMsg { role: "user" | "assistant"; text: string; }
+  const [jefeMessages, setJefeMessages] = useState<JefeMsg[]>([]);
+  const [jefeInput, setJefeInput] = useState("");
+  const [jefeBusy, setJefeBusy] = useState(false);
+  const jefeMsgsRef = useRef<HTMLDivElement>(null);
+  const jefeEndRef = useRef<HTMLDivElement>(null);
 
   /* voz */
   const voiceStoppedRef          = useRef(false);
@@ -727,12 +752,26 @@ export default function App() {
     } catch {}
   }, []);
 
+  const fetchActivity = useCallback(async () => {
+    try {
+      const r = await fetch("/api/agentes/actividad");
+      if (r.ok) setActivityLog(await r.json());
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (view !== "chat") return;
     fetchAgentStatus();
     const id = setInterval(fetchAgentStatus, 10_000);
     return () => clearInterval(id);
   }, [view, fetchAgentStatus]);
+
+  useEffect(() => {
+    if (view !== "chat") return;
+    fetchActivity();
+    const id = setInterval(fetchActivity, 4_000);
+    return () => clearInterval(id);
+  }, [view, fetchActivity]);
 
   const toggleAgents = useCallback(async () => {
     const next = !agentStatus?.enabled;
@@ -744,6 +783,180 @@ export default function App() {
       if (r.ok) setAgentStatus(await r.json());
     } catch {}
   }, [agentStatus]);
+
+  /* ── Redacción handlers ─────────────────────────────────────────── */
+  const fetchRedaccion = useCallback(async () => {
+    try {
+      const r = await fetch("/api/redaccion");
+      if (r.ok) setRedaccionAgentes(await r.json());
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (view !== "redaccion") return;
+    fetchRedaccion();
+    const id = setInterval(fetchRedaccion, 8000);
+    // Auto-seed if empty
+    fetch("/api/redaccion").then(async (r) => {
+      if (r.ok) {
+        const rows = await r.json();
+        if (rows.length === 0) {
+          await fetch("/api/redaccion/sembrar", { method: "POST" });
+          fetchRedaccion();
+        }
+      }
+    });
+    return () => clearInterval(id);
+  }, [view, fetchRedaccion]);
+
+  const seedRedaccion = useCallback(async () => {
+    await fetch("/api/redaccion/sembrar", { method: "POST" });
+    fetchRedaccion();
+  }, [fetchRedaccion]);
+
+  const saveAgentName = useCallback(async (id: number) => {
+    if (editNameValue.trim()) {
+      await fetch(`/api/redaccion/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: editNameValue.trim() }),
+      });
+      fetchRedaccion();
+    }
+    setEditingName(null);
+  }, [editNameValue, fetchRedaccion]);
+
+  const deleteAgente = useCallback(async (id: number) => {
+    await fetch(`/api/redaccion/${id}`, { method: "DELETE" });
+    fetchRedaccion();
+  }, [fetchRedaccion]);
+
+  const addTask = useCallback(async (id: number) => {
+    const ag = redaccionAgentes.find((a) => a.id === id);
+    if (!ag) return;
+    const tareas = [...ag.tareas, "nueva tarea"];
+    await fetch(`/api/redaccion/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tareas }),
+    });
+    fetchRedaccion();
+  }, [redaccionAgentes, fetchRedaccion]);
+
+  const deleteTask = useCallback(async (id: number, idx: number) => {
+    const ag = redaccionAgentes.find((a) => a.id === id);
+    if (!ag) return;
+    const tareas = ag.tareas.filter((_: string, i: number) => i !== idx);
+    await fetch(`/api/redaccion/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tareas }),
+    });
+    fetchRedaccion();
+  }, [redaccionAgentes, fetchRedaccion]);
+
+  const saveTask = useCallback(async (id: number, idx: number) => {
+    setEditingTask(null);
+    if (!editTaskValue.trim()) return;
+    const ag = redaccionAgentes.find((a) => a.id === id);
+    if (!ag) return;
+    const tareas = [...ag.tareas];
+    tareas[idx] = editTaskValue.trim();
+    await fetch(`/api/redaccion/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tareas }),
+    });
+    fetchRedaccion();
+  }, [editTaskValue, redaccionAgentes, fetchRedaccion]);
+
+  /* Actividad por agente */
+  const [actividadPorAgente, setActividadPorAgente] = useState<Record<string, string>>({});
+  const [actividad, setActividad] = useState<Record<string, ActivityEntry[]>>({});
+
+  const fetchActividad = useCallback(async () => {
+    try {
+      const r = await fetch("/api/redaccion/actividad");
+      if (!r.ok) return;
+      const data = await r.json() as { actividad: ActivityEntry[]; agentes: any[] };
+      const grouped: Record<string, ActivityEntry[]> = {};
+      for (const act of data.actividad) {
+        if (!grouped[act.agentId]) grouped[act.agentId] = [];
+        grouped[act.agentId].push(act);
+      }
+      setActividad(grouped);
+      const latest: Record<string, string> = {};
+      for (const ag of data.agentes) {
+        if (ag.agenteId && grouped[ag.agenteId]?.[0]) {
+          latest[ag.agenteId] = grouped[ag.agenteId][0].msg;
+        }
+      }
+      setActividadPorAgente(latest);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (view !== "redaccion") return;
+    fetchActividad();
+    const id = setInterval(fetchActividad, 4000);
+    return () => clearInterval(id);
+  }, [view, fetchActividad]);
+
+  /* ── Jefe Editor ── */
+  useEffect(() => {
+    jefeEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [jefeMessages]);
+
+  const jefeSend = useCallback(async () => {
+    const msg = jefeInput.trim();
+    if (!msg || jefeBusy) return;
+    setJefeInput("");
+    setJefeMessages((prev) => [...prev, { role: "user", text: msg }]);
+    setJefeBusy(true);
+    try {
+      const r = await fetch("/api/redaccion/jefe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg }),
+      });
+      const reader = r.body?.getReader();
+      if (!reader) return;
+      let partial = "";
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        for (const line of chunk.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const ev = JSON.parse(line.slice(6)) as { type: string; text?: string; error?: string };
+            if (ev.type === "text" && ev.text) {
+              partial += ev.text;
+              setJefeMessages((prev) => {
+                const next = [...prev];
+                if (next.length > 0 && next[next.length - 1].role === "assistant") {
+                  next[next.length - 1] = { role: "assistant", text: partial };
+                } else {
+                  next.push({ role: "assistant", text: partial });
+                }
+                return next;
+              });
+            }
+          } catch {}
+        }
+      }
+    } catch (e) {
+      setJefeMessages((prev) => [...prev, { role: "assistant", text: `Error: ${(e as Error).message}` }]);
+    } finally {
+      setJefeBusy(false);
+    }
+  }, [jefeInput, jefeBusy]);
+
+  const resetJefe = useCallback(async () => {
+    await fetch("/api/redaccion/jefe/reset", { method: "POST" });
+    setJefeMessages([]);
+  }, []);
 
   /* ── Render ─────────────────────────────────────────────────────── */
   return (
@@ -781,6 +994,7 @@ export default function App() {
                 { id: "voz" as const,  label: "♪ VOZ" },
                 { id: "terminal" as const, label: "▸ TERMINAL" },
                 { id: "portal" as const, label: "◉ PORTAL" },
+                { id: "redaccion" as const, label: "◼ REDACCIÓN" },
                 { id: null, label: "─" },
                 { id: "new" as any, label: "◈ NUEVA CONVERSACIÓN" },
                 { id: "history" as any, label: "☰ HISTORIAL" },
@@ -788,7 +1002,7 @@ export default function App() {
                 if (item.label === "─") {
                   return <div key={idx} style={{ height: 1, background: "#222", margin: "4px 0" }} />;
                 }
-                const isView = item.id === "chat" || item.id === "voz" || item.id === "terminal" || item.id === "portal";
+                const isView = item.id === "chat" || item.id === "voz" || item.id === "terminal" || item.id === "portal" || item.id === "redaccion";
                 const active = isView && view === item.id;
                 return (
                   <button key={item.id} onClick={() => {
@@ -820,7 +1034,7 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", paddingLeft: 16 }}>
           <span style={{ color: "#cc0000", fontSize: 11, fontWeight: 700,
             letterSpacing: ".12em", textTransform: "uppercase", fontFamily: MONO }}>
-            {view === "chat" ? "◈ PERIODISTA" : view === "voz" ? "♪ VOZ" : view === "portal" ? "◉ PORTAL" : "▸ TERMINAL"}
+            {view === "chat" ? "◈ PERIODISTA" : view === "voz" ? "♪ VOZ" : view === "portal" ? "◉ PORTAL" : view === "redaccion" ? "◼ REDACCIÓN" : "▸ TERMINAL"}
           </span>
         </div>
 
@@ -851,6 +1065,22 @@ export default function App() {
             {charlaMode ? "✦ CHARLA" : "○ CHARLA"}
           </button>
         )}
+
+        {/* Redacción button */}
+        <button onClick={() => setView("redaccion")}
+          style={{
+            marginLeft: view === "chat" ? 16 : "auto",
+            background: view === "redaccion" ? "#cc0000" : "transparent",
+            color: view === "redaccion" ? "#fff" : "#444",
+            border: view === "redaccion" ? "none" : "1px solid #333",
+            padding: "3px 10px", fontSize: 10, fontWeight: 700,
+            letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer",
+            fontFamily: MONO, whiteSpace: "nowrap",
+          }}
+          onMouseEnter={(e) => { if (view !== "redaccion") { e.currentTarget.style.borderColor = "#cc0000"; e.currentTarget.style.color = "#cc0000"; } }}
+          onMouseLeave={(e) => { if (view !== "redaccion") { e.currentTarget.style.borderColor = "#333"; e.currentTarget.style.color = "#444"; } }}>
+          ◼ REDACCIÓN
+        </button>
 
         {/* Agent indicator */}
         {view === "chat" && (
@@ -979,10 +1209,184 @@ export default function App() {
                 </div>
               );
             })}
-        </div>
-      </div>
+    </div>
+  </div>
 
-      {/* ════ CHAT ════ */}
+  {/* ════ REDACCIÓN ════ */}
+  <div style={{ flex: view === "redaccion" ? 1 : 0,
+    display: view === "redaccion" ? "flex" : "none",
+    flexDirection: "column", overflow: "hidden", minHeight: 0, fontFamily: MONO }}>
+
+    {/* Agent grid */}
+    <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+      {redaccionAgentes.length === 0 && (
+        <div style={{ textAlign: "center", padding: 40, color: "#555", fontSize: 11 }}>
+          Sin agentes. Creá uno o activá los existentes.
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
+        {redaccionAgentes.map((ag) => (
+          <div key={ag.id} style={{
+            background: "#0d0d0d", border: "1px solid #1a1a1a",
+            borderLeft: "3px solid #cc0000", padding: 10,
+            display: "flex", flexDirection: "column", gap: 6,
+          }}>
+            {/* Name row */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {editingName === ag.id ? (
+                <input autoFocus
+                  value={editNameValue}
+                  onChange={(e) => setEditNameValue(e.target.value)}
+                  onBlur={() => saveAgentName(ag.id)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveAgentName(ag.id); }}
+                  style={{ flex: 1, background: "#111", border: "1px solid #cc0000", color: "#eee",
+                    fontSize: 12, fontWeight: 700, padding: "4px 6px", fontFamily: MONO, outline: "none" }} />
+              ) : (
+                <>
+                  <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: "#eee",
+                    letterSpacing: ".04em" }}>{ag.nombre}</span>
+                  <button onClick={() => { setEditingName(ag.id); setEditNameValue(ag.nombre); }}
+                    style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 10 }}>✎</button>
+                </>
+              )}
+            </div>
+
+            {/* Linked agent badge */}
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              {ag.agenteId && (
+                <span style={{ fontSize: 8, color: "#666", letterSpacing: ".08em", textTransform: "uppercase",
+                  background: "#111", padding: "2px 5px" }}>
+                  ⟳ {ag.agenteId}
+                </span>
+              )}
+              {actividadPorAgente[ag.agenteId || ""] && (
+                <span style={{ fontSize: 8, color: "#e8c030", letterSpacing: ".04em" }}>
+                  {actividadPorAgente[ag.agenteId || ""]}
+                </span>
+              )}
+              <button onClick={() => deleteAgente(ag.id)}
+                style={{ marginLeft: "auto", background: "none", border: "none", color: "#e83030", cursor: "pointer", fontSize: 9 }}>
+                ×
+              </button>
+            </div>
+
+            {/* Tasks */}
+            <div style={{ fontSize: 10, color: "#888", lineHeight: 1.7 }}>
+              {ag.tareas.map((t, ti) => (
+                <div key={ti} style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  <span style={{ color: "#cc0000" }}>▸</span>
+                  {editingTask === `${ag.id}-${ti}` ? (
+                    <input autoFocus
+                      value={editTaskValue}
+                      onChange={(e) => setEditTaskValue(e.target.value)}
+                      onBlur={() => saveTask(ag.id, ti)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveTask(ag.id, ti); }}
+                      style={{ flex: 1, background: "#111", border: "1px solid #444", color: "#ccc",
+                        fontSize: 10, padding: "2px 4px", fontFamily: MONO, outline: "none" }} />
+                  ) : (
+                    <>
+                      <span style={{ flex: 1 }}>{t}</span>
+                      <button onClick={() => { setEditingTask(`${ag.id}-${ti}`); setEditTaskValue(t); }}
+                        style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 8 }}>✎</button>
+                      <button onClick={() => deleteTask(ag.id, ti)}
+                        style={{ background: "none", border: "none", color: "#e83030", cursor: "pointer", fontSize: 8 }}>×</button>
+                    </>
+                  )}
+                </div>
+              ))}
+              <button onClick={() => addTask(ag.id)}
+                style={{ background: "none", border: "1px dashed #333", color: "#555", cursor: "pointer",
+                  fontSize: 9, padding: "2px 8px", marginTop: 4, width: "100%" }}>
+                + tarea
+              </button>
+            </div>
+
+            {/* Activity log for this agent */}
+            {ag.agenteId && (
+              <div style={{ fontSize: 8, color: "#444", maxHeight: 40, overflowY: "auto",
+                borderTop: "1px solid #141414", paddingTop: 4, marginTop: "auto" }}>
+                {actividad[ag.agenteId]?.slice(0, 3).map((act, ai) => (
+                  <div key={ai} style={{ color: act.type === "error" ? "#e83030" : act.type === "done" ? "#3a9a3a" : "#666" }}>
+                    {act.time} {act.msg}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* Jefe Editor chat */}
+    <div style={{ borderTop: "2px solid #cc0000", display: "flex", flexDirection: "column",
+      maxHeight: 300, minHeight: 200, flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", padding: "6px 12px",
+        background: "#0a0a0a", borderBottom: "1px solid #1a1a1a", gap: 8 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: "#cc0000", letterSpacing: ".1em",
+          textTransform: "uppercase" }}>JEFE EDITOR</span>
+        <span style={{ fontSize: 8, color: "#555" }}>consultá sobre cobertura y estrategia</span>
+        <button onClick={() => resetJefe()}
+          style={{ marginLeft: "auto", background: "none", border: "1px solid #333", color: "#555",
+            cursor: "pointer", fontSize: 8, padding: "2px 6px" }}>
+          LIMPIAR
+        </button>
+      </div>
+      <div ref={jefeMsgsRef} style={{ flex: 1, overflowY: "auto", padding: 8, fontSize: 11, lineHeight: 1.6 }}>
+        {jefeMessages.length === 0 && (
+          <div style={{ textAlign: "center", color: "#444", padding: 20, fontSize: 10 }}>
+            Consultá al jefe editor sobre la redacción
+          </div>
+        )}
+        {jefeMessages.map((m, i) => (
+          <div key={i} style={{
+            display: "flex", gap: 6, marginBottom: 8,
+            flexDirection: m.role === "user" ? "row-reverse" : "row",
+          }}>
+            <div style={{
+              background: m.role === "user" ? "#cc0000" : "#111",
+              border: m.role === "user" ? "none" : "1px solid #222",
+              padding: "6px 10px", borderRadius: 4,
+              maxWidth: "80%", wordBreak: "break-word",
+              color: m.role === "user" ? "#fff" : "#ccc",
+              fontFamily: m.role === "user" ? MONO : SANS,
+              fontSize: m.role === "user" ? 11 : 12,
+            }}>{m.text}</div>
+          </div>
+        ))}
+        {jefeBusy && (
+          <div style={{ color: "#666", fontSize: 10, padding: "4px 0" }}>
+            <span style={{ display: "inline-flex", gap: 3, alignItems: "center" }}>
+              {[0, .25, .5].map((d, j) => (
+                <span key={j} style={{ width: 4, height: 4, background: "#cc0000",
+                  display: "inline-block", animation: `pulse 1.2s ${d}s infinite` }} />
+              ))}
+            </span>
+          </div>
+        )}
+        <div ref={jefeEndRef} />
+      </div>
+      <div style={{ display: "flex", borderTop: "1px solid #1a1a1a", padding: "6px 8px", gap: 6, background: "#0a0a0a" }}>
+        <textarea
+          value={jefeInput}
+          onChange={(e) => setJefeInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void jefeSend(); } }}
+          placeholder="consultar al editor..."
+          rows={1} disabled={jefeBusy}
+          style={{ flex: 1, background: "#0d0d0d", border: "1px solid #1e1e1e",
+            color: "#e8e8e8", fontSize: 11, padding: "6px 8px", resize: "none",
+            fontFamily: MONO, lineHeight: 1.4, outline: "none", height: 30 }} />
+        <button onClick={() => void jefeSend()} disabled={jefeBusy || !jefeInput.trim()}
+          style={{
+            background: jefeBusy || !jefeInput.trim() ? "#111" : "#cc0000",
+            color: jefeBusy || !jefeInput.trim() ? "#333" : "#fff",
+            border: "none", cursor: jefeBusy || !jefeInput.trim() ? "not-allowed" : "pointer",
+            padding: "0 12px", fontSize: 10, fontWeight: 700, fontFamily: MONO,
+          }}>→</button>
+      </div>
+    </div>
+  </div>
+
+  {/* ════ CHAT ════ */}
       <div style={{ flex: view === "chat" ? 1 : 0,
         display: view === "chat" ? "flex" : "none",
         flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
@@ -1060,6 +1464,39 @@ export default function App() {
           ))}
           <div ref={msgsEndRef} />
         </div>
+
+        {/* Activity feed */}
+        {activityLog.length > 0 && (
+          <div style={{ borderTop: "1px solid #1a1a1a", flexShrink: 0 }}>
+            <button onClick={() => setActivityOpen(!activityOpen)}
+              style={{
+                width: "100%", background: "#0a0a0a", border: "none", cursor: "pointer",
+                padding: "6px 16px", display: "flex", alignItems: "center", gap: 8,
+                color: "#555", fontFamily: MONO, fontSize: 9, fontWeight: 700,
+                letterSpacing: ".1em", textTransform: "uppercase",
+              }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%",
+                background: activityLog.some(a => a.type === "tool") ? "#e8c030" : "#555" }} />
+              actividad — {activityLog.filter(a => a.type === "tool" || a.type === "step").length} eventos
+              <span style={{ marginLeft: "auto" }}>{activityOpen ? "▾" : "▸"}</span>
+            </button>
+            {activityOpen && (
+              <div style={{ maxHeight: 140, overflowY: "auto", background: "#080808",
+                padding: "4px 0", fontFamily: MONO, fontSize: 10, lineHeight: 1.6 }}>
+                {activityLog.map((a, i) => (
+                  <div key={i} style={{
+                    display: "flex", gap: 8, padding: "2px 16px",
+                    color: a.type === "error" ? "#e83030" : a.type === "done" ? "#3a9a3a" : "#888",
+                  }}>
+                    <span style={{ color: "#444", width: 50, flexShrink: 0 }}>{a.time}</span>
+                    <span style={{ color: "#666", width: 80, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.agentLabel}</span>
+                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.msg}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Input */}
         <div style={{ borderTop: "2px solid #cc0000", padding: "10px 16px 14px",
