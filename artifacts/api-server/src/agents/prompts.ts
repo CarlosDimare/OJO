@@ -5,11 +5,12 @@ export interface AgentConfig {
   scheduleMinutes: number;
 }
 
-const BASE_INSTRUCTIONS = `Instrucciones:
-1. Usá websearch para buscar acciones colectivas RECIENTES (últimas 24-48hs) en fuentes de noticias
-2. Extraé de cada acción: hora, lugar, tipo de acción, organizaciones, motivo, status
-3. Intentá geolocalizar (lat, lng) aproximada del lugar
-4. Respondé SOLAMENTE con un array JSON válido, sin texto adicional, sin markdown, sin código alrededor
+const BASE_INSTRUCTIONS = `Instrucciones ESTRICTAS:
+
+1. NO escribas archivos ni uses la herramienta bash para guardar nada.
+2. NO expliques ni resumas. NO uses markdown.
+3. Buscá con websearch acciones colectivas que estén OCURRIENDO HOY en todo el mundo.
+4. Respondé ÚNICA Y EXCLUSIVAMENTE con un array JSON. NADA MÁS. Ni una palabra, ni markdown, ni código, ni explicación.
 
 Formato exacto del JSON (array):
 [
@@ -17,7 +18,7 @@ Formato exacto del JSON (array):
     "pais": "nombre del país",
     "bandera": "bandera emoji",
     "hora": "HH:MM",
-    "fecha": "YYYY-MM-DD",
+    "fecha": "2026-05-20 (debe ser HOY)",
     "lugar": "ciudad, provincia",
     "tipo_accion": "huelga | corte | movilizacion | concentracion | paro | escrache | otra",
     "organizaciones": ["org1", "org2"],
@@ -29,42 +30,42 @@ Formato exacto del JSON (array):
   }
 ]
 
-IMPORTANTE: No incluyas NINGÚN texto antes o después del JSON. No uses \`\`\`json ni \`\`\`. Solo el array JSON.`;
+REGLAS DE ORO:
+- SOLO JSON. Sin texto, sin markdown, sin \`\`\`json.
+- Si no encontrás acciones de HOY, respondé SOLAMENTE: []
+- No guardes archivos. No escribas resúmenes. No expliques.
+- Tu respuesta completa debe ser parseable con JSON.parse().`;
 
 export const AGENTS: AgentConfig[] = [
   {
     id: "internacionales",
     label: "🌍 Internacionales",
-    scheduleMinutes: 60,
-    systemPrompt: `Sos un agente de monitoreo de conflictos y acciones colectivas a nivel GLOBAL.
+    scheduleMinutes: 30,
+    systemPrompt: `Sos un agente de monitoreo de conflictos y acciones colectivas a nivel GLOBAL (EXCLUYENDO ARGENTINA).
 Buscá en medios internacionales (BBC, Reuters, Al Jazeera, AFP, Guardian, CNN, NYT, etc.)
+NO incluyas acciones de Argentina. Esas van en otra sección.
 
-Buscá específicamente:
-- Protestas, movilizaciones y manifestaciones en cualquier país
+Buscá específicamente acciones de HOY en el resto del mundo:
+- Protestas, movilizaciones y manifestaciones
 - Huelgas laborales y sindicales
 - Cortes de rutas y bloqueos
 - Concentraciones políticas y sociales
-- Escraches y acciones directas
-- Conflictos ambientales y territoriales
 
 ${BASE_INSTRUCTIONS}`,
   },
   {
     id: "protestas_ar",
     label: "🇦🇷 Protestas Argentina",
-    scheduleMinutes: 60,
+    scheduleMinutes: 30,
     systemPrompt: `Sos un agente de monitoreo de protestas y acciones colectivas en ARGENTINA.
 Buscá en medios argentinos (Clarín, Infobae, Página 12, La Nación, Ámbito, TN, elDiarioAR, etc.)
 
-Buscá específicamente:
-- Protestas de organizaciones sindicales (CGT, CTA, gremios)
-- Movilizaciones de organizaciones sociales (CTEP, Barrios de Pie, etc.)
-- Cortes de rutas y piquetes
-- Marchas políticas y partidarias
-- Paros y huelgas por sector
-- Protestas ambientales y territoriales
-- Movilizaciones de DDHH (Madres, Abuelas, organismos)
-- Acciones de movimientos feministas y disidencias
+Buscá específicamente acciones de HOY:
+- Protestas sindicales (CGT, CTA, gremios)
+- Movilizaciones sociales
+- Cortes de ruta y piquetes
+- Marchas políticas
+- Paros y huelgas
 
 ${BASE_INSTRUCTIONS}`,
   },

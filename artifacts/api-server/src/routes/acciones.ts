@@ -46,6 +46,59 @@ router.get("/acciones/:id", async (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/acciones/:id
+router.put("/acciones/:id", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) {
+      res.status(400).json({ error: "invalid id" });
+      return;
+    }
+    const allowed = ["pais", "bandera", "hora", "fecha", "lugar", "tipoAccion", "tipo_accion", "organizaciones", "motivo", "status", "lat", "lng", "fuentes", "seccion"];
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) {
+        const dbKey = key === "tipoAccion" ? "tipoAccion" : key === "tipo_accion" ? "tipoAccion" : key;
+        update[dbKey] = req.body[key];
+      }
+    }
+    const [row] = await db
+      .update(accionesTable)
+      .set(update)
+      .where(eq(accionesTable.id, id))
+      .returning();
+    if (!row) {
+      res.status(404).json({ error: "not found" });
+      return;
+    }
+    res.json(row);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// DELETE /api/acciones/:id
+router.delete("/acciones/:id", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) {
+      res.status(400).json({ error: "invalid id" });
+      return;
+    }
+    const [row] = await db
+      .delete(accionesTable)
+      .where(eq(accionesTable.id, id))
+      .returning();
+    if (!row) {
+      res.status(404).json({ error: "not found" });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // POST /api/agentes/disparar
 router.post("/agentes/disparar", async (_req: Request, res: Response) => {
   const { seccion } = _req.body as { seccion?: string };

@@ -28,6 +28,16 @@ export const redaccionAgentesTable = pgTable("redaccion_agentes", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const coberturasTable = pgTable("coberturas", {
+  id: serial("id").primaryKey(),
+  titulo: text("titulo").notNull(),
+  contenido: text("contenido").notNull(),
+  autor: text("autor"),
+  tags: jsonb("tags").$type<string[]>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const accionesTable = pgTable("acciones_colectivas", {
   id: serial("id").primaryKey(),
   seccion: text("seccion").notNull(),

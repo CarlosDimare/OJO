@@ -47,11 +47,16 @@ export async function runAgentById(id: string): Promise<{ ok: boolean; count: nu
 
 export function startScheduler(): void {
   if (intervalId) return;
+  // Run agents immediately on startup
+  setImmediate(() => {
+    logger.info("Running initial agent cycle on startup");
+    runAllAgents().catch((err) => logger.error({ error: err.message }, "Initial agent run failed"));
+  });
   intervalId = setInterval(() => {
     if (!enabled) return;
     runAllAgents().catch((err) => logger.error({ error: err.message }, "Scheduled agent run failed"));
-  }, 60 * 60 * 1000);
-  logger.info("Agent scheduler started — runs every 60 minutes");
+  }, 30 * 60 * 1000);
+  logger.info("Agent scheduler started — runs every 30 minutes with immediate first run");
 }
 
 export function stopScheduler(): void {

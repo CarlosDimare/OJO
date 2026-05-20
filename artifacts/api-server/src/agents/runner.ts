@@ -75,12 +75,17 @@ function normalize(accion: AccionRaw): AccionRaw {
 }
 
 export async function runAgent(agent: AgentConfig): Promise<{ ok: boolean; count: number; error?: string }> {
-  const now = new Date().toLocaleString("es-AR", {
+  const now = new Date();
+  const today = now.toLocaleDateString("es-AR", {
     timeZone: "America/Argentina/Buenos_Aires",
-    dateStyle: "full",
-    timeStyle: "short",
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
-  const fullPrompt = `Fecha y hora actual: ${now}\n\n${agent.systemPrompt}\n\nBuscá acciones colectivas RECIENTES para esta sección: ${agent.label}`;
+  const todayISO = now.toISOString().slice(0, 10);
+  const hora = now.toLocaleTimeString("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    hour: "2-digit", minute: "2-digit",
+  });
+  const fullPrompt = `HOY es ${today} (${todayISO}). ${hora} hs Argentina.\n\nBuscá SOLO acciones colectivas que estén ocurriendo HOY ${todayISO}.\n\n${agent.systemPrompt}\n\nBuscá acciones colectivas RECIENTES para esta sección: ${agent.label}`;
   const args = ["run", "--format", "json", fullPrompt];
 
   logger.info({ agent: agent.id }, "Agent starting");
@@ -93,9 +98,9 @@ export async function runAgent(agent: AgentConfig): Promise<{ ok: boolean; count
 
     const killTimer = setTimeout(() => {
       proc.kill("SIGKILL");
-      pushActivity({ agentId: agent.id, agentLabel: agent.label, time: new Date().toLocaleTimeString("es-AR"), msg: "TimeOut — no respondió en 30s", type: "error" });
-      logger.warn({ agent: agent.id }, "Agent timed out after 30s");
-    }, 30_000);
+      pushActivity({ agentId: agent.id, agentLabel: agent.label, time: new Date().toLocaleTimeString("es-AR"), msg: "TimeOut — no respondió en 90s", type: "error" });
+      logger.warn({ agent: agent.id }, "Agent timed out after 90s");
+    }, 90_000);
 
     let botText = "";
     let stderrBuf = "";
@@ -149,8 +154,10 @@ export async function runAgent(agent: AgentConfig): Promise<{ ok: boolean; count
 
       const raw = extractJSON(botText);
       if (raw.length === 0) {
+        console.error("=== RAW BOT TEXT ===", botText.slice(0, 2000));
+        console.error("=== STDERR ===", stderrBuf.trim().slice(0, 1000));
         pushActivity({ agentId: agent.id, agentLabel: agent.label, time: t, msg: "No se encontraron acciones", type: "done" });
-        logger.warn({ agent: agent.id, text: botText.slice(0, 200) }, "Agent returned no parseable data");
+        logger.warn({ agent: agent.id, text: botText.slice(0, 200), stderr: stderrBuf.trim().slice(0, 300) }, "Agent returned no parseable data");
         resolve({ ok: false, count: 0, error: "No se pudo extraer JSON de la respuesta" });
         return;
       }

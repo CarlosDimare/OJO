@@ -4,7 +4,7 @@ import { spawn } from "child_process";
 import { resolve, dirname } from "path";
 import { existsSync } from "fs";
 import { fileURLToPath } from "url";
-import { db, redaccionAgentesTable } from "@workspace/db";
+import { db, redaccionAgentesTable, coberturasTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getActivity, clearActivity } from "../agents/activity";
 
@@ -160,13 +160,153 @@ router.get("/redaccion/actividad", async (_req: Request, res: Response) => {
   }
 });
 
+/* ── Ejecutar agente (investigar y publicar en coberturas) ────── */
+
+// POST /api/redaccion/ejecutar/:id
+router.post("/redaccion/ejecutar/:id", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: "invalid id" });
+    }
+
+    const [agent] = await db
+      .select()
+      .from(redaccionAgentesTable)
+      .where(eq(redaccionAgentesTable.id, id))
+      .limit(1);
+
+    if (!agent) {
+      return res.status(404).json({ error: "agent not found" });
+    }
+
+    const { tareaIndice } = req.body as { tareaIndice?: number };
+    const tasks = tareaIndice !== undefined && agent.tareas[tareaIndice]
+      ? [agent.tareas[tareaIndice]]
+      : agent.tareas;
+
+    const promptText = tasks.join(". ");
+
+    const fullPrompt = `Sos un periodista de investigación del medio "CD" (Corresponsal Digital). Tu tarea específica es: ${promptText}
+
+Instrucciones:
+1. Buscá información actualizada en la web sobre este tema.
+2. Redactá una nota periodística completa con: título, contexto, datos chequeados, fuentes citadas con [texto](url).
+3. Incluí fechas, lugares, protagonistas y cifras verificables.
+4. Si encontrás información relevante, usá el formato ::: cifra para destacar números importantes.
+5. NO incluyas tuopinión personal ni editorialices.
+6. Respondé ÚNICA Y EXCLUSIVAMENTE con el contenido de la nota. Sin explicaciones, sin "Claro", sin presentación.
+7. La nota debe estar en español.`;
+
+    const args = ["run", "--format", "json", fullPrompt];
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.flushHeaders();
+
+    const sendEvent = (type: string, data: Record<string, unknown>) => {
+      res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+    };
+
+    sendEvent("session", { session_id: `ejecutar-${id}` });
+
+    const proc = spawn(OPENCODE, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let botText = "";
+    let stderrBuf = "";
+
+    const killTimer = setTimeout(() => {
+      proc.kill("SIGKILL");
+      sendEvent("error", { message: "El agente no respondió a tiempo (90s)" });
+      sendEvent("done", {});
+      res.end();
+    }, 90_000);
+
+    proc.stdout!.setEncoding("utf8");
+    proc.stdout!.on("data", (chunk: string) => {
+      for (const raw of chunk.split("\n")) {
+        const line = raw.trim();
+        if (!line) continue;
+        try {
+          const event = JSON.parse(line) as Record<string, unknown>;
+          const evType = event["type"] as string;
+          const part = (event["part"] ?? {}) as Record<string, unknown>;
+          if (evType === "text" && part["type"] === "text" && part["text"]) {
+            const text = part["text"] as string;
+            botText += text;
+            sendEvent("text", { text });
+          }
+        } catch {}
+      }
+    });
+
+    proc.stderr!.setEncoding("utf8");
+    proc.stderr!.on("data", (d: string) => { stderrBuf += d; });
+
+    proc.on("close", async (code) => {
+      clearTimeout(killTimer);
+
+      if (code !== 0 && stderrBuf.trim()) {
+        console.error("Ejecutar agente stderr:", stderrBuf.trim().slice(0, 200));
+      }
+
+      if (botText.trim()) {
+        try {
+          const titulo = tasks[0].slice(0, 120) || "Nota del agente";
+          const [row] = await db
+            .insert(coberturasTable)
+            .values({
+              titulo,
+              contenido: botText.trim(),
+              autor: agent.nombre,
+              tags: [],
+            })
+            .returning();
+          sendEvent("cobertura", { id: row.id, titulo: row.titulo });
+          sendEvent("text", { text: `\n\n---\n✅ Nota publicada en Coberturas: "${titulo}"` });
+        } catch (err) {
+          sendEvent("error", { message: "Error al guardar la cobertura" });
+        }
+      } else {
+        sendEvent("error", { message: "El agente no produjo contenido" });
+      }
+      sendEvent("done", {});
+      res.end();
+    });
+
+    proc.on("error", (err) => {
+      clearTimeout(killTimer);
+      sendEvent("error", { message: err.message });
+      sendEvent("done", {});
+      res.end();
+    });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
 /* ── Jefe Editor chat ─────────────────────────────────────────── */
 
-const JEFE_SYSTEM = `Eres el Jefe Editor de una redacción periodística seria e independiente.
-Tu equipo de reporteros te consulta sobre cobertura, fuentes, ángulos editoriales y estrategia.
-Respondé con claridad, firmeza y criterio periodístico.
-Usá el mismo formato que el asistente principal: cifras destacadas con ::: cifra, fuentes con [texto](url), etc.
-Tu estilo es directo, sin rodeos, con énfasis en datos chequeados.`;
+const JEFE_SYSTEM = `Eres el Jefe Editor de la redacción de "CD" (Corresponsal Digital), un medio independiente con base en Buenos Aires, Argentina.
+
+Tu rol: Coordinás un equipo de reporteros que cubren protestas, conflictos y acciones colectivas en Argentina y el mundo. Asignás tareas, revisás cobertura, definís ángulos editoriales y resolvés dudas del equipo.
+
+Contexto actual:
+- Fecha: la que se indica abajo.
+- La redacción opera en Argentina (huso horario -03:00).
+- Tu equipo incluye corresponsales en terreno y agentes automatizados de monitoreo.
+- Las fuentes deben ser chequeadas y verificables.
+- El tono es serio, directo, sin adjetivos innecesarios. Priorizamos datos sobre opinión.
+
+Respondé con claridad y firmeza, como un jefe de redacción experimentado. Usá el mismo formato que el asistente principal (::: cifra, [fuentes](url), etc.) cuando incluyas datos concretos.`;
+
+const JEFE_EDITOR_NOTE = `\n\nIMPORTANTE: Hoy sos Jefe Editor. Respondé como tal. Si te consultan sobre cobertura, definí prioridades. Si te piden revisar una nota, señalá problemas de enfoque o fuentes. Si preguntan por la línea editorial, defendela con argumentos. No te salgas del personaje.`;
 
 let jefeHistory: { role: "user" | "assistant"; content: string }[] = [];
 
@@ -176,7 +316,7 @@ function jefeSystemMsg(): { role: "system"; content: string } {
     dateStyle: "full",
     timeStyle: "short",
   });
-  return { role: "system", content: `${JEFE_SYSTEM}\n\nFecha y hora actual: ${now}` };
+  return { role: "system", content: `${JEFE_SYSTEM}\n\nMomento actual: ${now}\nUbicación: Redacción CD, Buenos Aires, Argentina${JEFE_EDITOR_NOTE}` };
 }
 
 // POST /api/redaccion/jefe

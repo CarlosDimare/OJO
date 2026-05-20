@@ -1,0 +1,180 @@
+[
+  {
+    "pais": "Reino Unido",
+    "bandera": "🇬🇧",
+    "hora": "12:00",
+    "fecha": "2026-05-19",
+    "lugar": "Londres, Inglaterra",
+    "tipo_accion": "huelga",
+    "organizaciones": ["RMT Union"],
+    "motivo": "Huelga de conductores del metro de Londres contra la implementación de semana laboral de 4 días comprimida que aumenta la fatiga. Líneas Circle y Piccadilly sin servicio.",
+    "status": "en_curso",
+    "lat": 51.5074,
+    "lng": -0.1278,
+    "fuentes": [
+      {"nombre": "My London", "url": "https://www.mylondon.news/news/transport/london-tube-strikes-2026-exact-33960470"},
+      {"nombre": "TimeOut London", "url": "https://www.timeout.com/london/news/may-2026-tube-strikes-how-to-get-around-london-during-rmt-industrial-action-this-week-051726"},
+      {"nombre": "Transport for London", "url": "https://tfl.gov.uk/campaign/strikes"}
+    ]
+  },
+  {
+    "pais": "España",
+    "bandera": "🇪🇸",
+    "hora": "00:00",
+    "fecha": "2026-05-20",
+    "lugar": "Vacarisses, Barcelona, Cataluña",
+    "tipo_accion": "huelga",
+    "organizaciones": ["CGT"],
+    "motivo": "Huelga de 24 horas en fábrica de Puig por disparidad salarial entre colectivos de la misma empresa. Concentración frente a sede corporativa en L'Hospitalet.",
+    "status": "en_curso",
+    "lat": 41.6068,
+    "lng": 1.9184,
+    "fuentes": [
+      {"nombre": "El Periódico", "url": "https://www.elperiodico.com/es/economia/20260518/puig-trabajadores-huelga-fabrica-vacarisses-fusion-estee-lauder-130347266"},
+      {"nombre": "El Confidencial", "url": "https://www.elconfidencial.com/empresas/2026-05-18/cgt-presiona-a-puig-con-una-huelga-estee-lauder_4356780"},
+      {"nombre": "Global Cosmetics News", "url": "https://www.globalcosmeticsnews.com/puig-workers-call-24-hour-strike-over-pay-dispute-at-barcelona-factory/"}
+    ]
+  },
+  {
+    "pais": "España",
+    "bandera": "🇪🇸",
+    "hora": "10:00",
+    "fecha": "2026-05-20",
+    "lugar": "Valencia, Comunidad Valenciana",
+    "tipo_accion": "huelga",
+    "organizaciones": ["STEPV", "CCOO", "UGT", "CSIF", "ANPE"],
+    "motivo": "Huelga indefinida de 80.000 docentes de educación pública no universitaria por salarios, condiciones laborales, ratios y burocracia. Concentración frente a Conselleria de Educación en reunión clave.",
+    "status": "en_curso",
+    "lat": 39.4699,
+    "lng": -0.3763,
+    "fuentes": [
+      {"nombre": "Demócrata", "url": "https://www.democrata.es/en/society/teachers-strike-all-the-keys-to-the-indefinite-teaching-strike-in-the-valencian-community/"},
+      {"nombre": "Alamy / Europa Press", "url": "https://www.alamy.com/dozens-of-people-gather-in-front-of-the-conselleria-de-educacin-during-the-official-meeting-called-after-the-indefinite-teachers-strike-on-20-may-2026-in-valencia-valencia-spain-image733107212.html"},
+      {"nombre": "El Mundo", "url": "https://www.elmundo.es/comunidad-valenciana/2026/05/16/6a0747bde9cf4a07588b45af.html"}
+    ]
+  },
+  {
+    "pais": "España",
+    "bandera": "🇪🇸",
+    "hora": "08:00",
+    "fecha": "2026-05-18",
+    "lugar": "Varias ciudades, España",
+    "tipo_accion": "huelga",
+    "organizaciones": ["CESM", "Sindicato Médicos Andaluz"],
+    "motivo": "Huelga nacional de médicos por mejores condiciones laborales, reducción de jornada y solución al colapso de urgencias. Semana de paros del 18 al 22 de mayo. 767.000 citas suspendidas acumuladas.",
+    "status": "en_curso",
+    "lat": 40.4168,
+    "lng": -3.7038,
+    "fuentes": [
+      {"nombre": "The Olive Press", "url": "https://www.theolivepress.es/spain-news/2026/04/30/doctors-protests-spain-cancelled-appointments/"},
+      {"nombre": "Sur in English", "url": "https://www.surinenglish.com/andalucia/new-week-doctors-strike-andalusia-these-are-20260427134005-nt.html"},
+      {"nombre": "El Confidencial", "url": "https://www.elconfidencial.com/salud/2026-05-18/huelga-medicos-espana-manifestaciones-1tna-1qrt_4356676/"}
+    ]
+  },
+  {
+    "pais": "Bolivia",
+    "bandera": "🇧🇴",
+    "hora": "09:00",
+    "fecha": "2026-05-14",
+    "lugar": "La Paz",
+    "tipo_accion": "movilizacion",
+    "organizaciones": ["Central Obrera Boliviana", "Federación de Cooperativas Mineras de Potosí"],
+    "motivo": "Protestas masivas de mineros, agricultores, docentes y pueblos indígenas contra ley de hipoteca de tierras, crisis económica, escasez de combustible y exigencia de renuncia del presidente Rodrigo Paz. Enfrentamientos con dinamita y gases lacrimógenos.",
+    "status": "en_curso",
+    "lat": -16.5,
+    "lng": -68.15,
+    "fuentes": [
+      {"nombre": "Reuters", "url": "https://www.aol.com/articles/explosions-heard-during-bolivia-march-193546000.html"},
+      {"nombre": "AP / LMTonline", "url": "https://www.lmtonline.com/news/world/article/clashes-erupt-in-bolivia-as-miners-set-off-22259772.php"},
+      {"nombre": "France 24", "url": "https://www.france24.com/en/live-news/20260515-bolivia-government-says-deal-reached-with-protesting-miners"},
+      {"nombre": "Wikipedia", "url": "https://en.wikipedia.org/wiki/2026_Bolivian_protests"}
+    ]
+  },
+  {
+    "pais": "Bélgica",
+    "bandera": "🇧🇪",
+    "hora": "09:00",
+    "fecha": "2026-05-12",
+    "lugar": "Bruselas",
+    "tipo_accion": "paro",
+    "organizaciones": ["CSC/ACV", "FGTB/ABVV", "CGSLB/ACLVB"],
+    "motivo": "Huelga general nacional contra medidas de austeridad del gobierno de Bart De Wever: reforma de pensiones (subida a 67 años), recorte de salarios y ataque a indexación salarial automática. 40.000-100.000 manifestantes. Vuelos cancelados y transporte público reducido.",
+    "status": "finalizado",
+    "lat": 50.8503,
+    "lng": 4.3517,
+    "fuentes": [
+      {"nombre": "Euronews", "url": "https://www.euronews.com/my-europe/2026/05/12/general-strike-in-belgium-against-government-reforms-draws-tens-of-thousands-to-the-capita"},
+      {"nombre": "Common Dreams", "url": "https://www.commondreams.org/news/belgium-general-strike"},
+      {"nombre": "The Brussels Times", "url": "https://www.brusselstimes.com/2117838/national-strike-latest-updates-as-belgian-trade-unions-take-to-the-streets-tbtb"}
+    ]
+  },
+  {
+    "pais": "Argentina",
+    "bandera": "🇦🇷",
+    "hora": "15:00",
+    "fecha": "2026-05-12",
+    "lugar": "Buenos Aires y principales ciudades",
+    "tipo_accion": "movilizacion",
+    "organizaciones": ["CIN (Consejo Interuniversitario Nacional)", "sindicatos docentes", "agrupaciones estudiantiles"],
+    "motivo": "Marcha federal universitaria: decenas de miles protestan contra los recortes presupuestarios de Javier Milei a universidades públicas. Exigen cumplimiento de ley de financiamiento universitario. 600.000 según organizadores en Buenos Aires.",
+    "status": "finalizado",
+    "lat": -34.6037,
+    "lng": -58.3816,
+    "fuentes": [
+      {"nombre": "AP / US News", "url": "https://www.usnews.com/news/world/articles/2026-05-12/mass-protests-in-argentina-decry-mileis-funding-cuts-to-prized-public-universities"},
+      {"nombre": "Argentina Reports", "url": "https://argentinareports.com/the-science-and-education-budget-cuts-that-led-hundreds-of-thousands-of-argentines-to-protest-this-week/4244"},
+      {"nombre": "ABC News", "url": "https://abcnews.com/International/wireStory/mass-protests-argentina-decry-mileis-funding-cuts-prized-132900612"}
+    ]
+  },
+  {
+    "pais": "India",
+    "bandera": "🇮🇳",
+    "hora": "11:00",
+    "fecha": "2026-05-12",
+    "lugar": "Nueva Delhi y varias ciudades",
+    "tipo_accion": "movilizacion",
+    "organizaciones": ["SFI", "AISA", "AISF", "NSUI", "Karnataka Youth Congress"],
+    "motivo": "Protestas estudiantiles por filtración del examen NEET-UG 2026 (ingreso a medicina) que obligó a su cancelación. Exigen investigación, compensación y eliminación de la NTA. Nueva protesta 'Raj Bhavan Chalo' prevista para el 21 de mayo en Bengaluru.",
+    "status": "en_curso",
+    "lat": 28.6139,
+    "lng": 77.209,
+    "fuentes": [
+      {"nombre": "BBC", "url": "https://www.aol.com/articles/protests-india-medical-entrance-test-110816139.html"},
+      {"nombre": "The Left Views", "url": "https://www.leftviews.in/movements-84561/news-23722/neet-ug-2026-paper-leak-student-organisations-demand-scrap-nta-57763"},
+      {"nombre": "Economic Times", "url": "https://economictimes.indiatimes.com/news/india/neet-paper-leak-row-karnataka-youth-congress-to-hold-raj-bhavan-chalo-protest/articleshow/131151192.cms"}
+    ]
+  },
+  {
+    "pais": "Bélgica",
+    "bandera": "🇧🇪",
+    "hora": "08:00",
+    "fecha": "2026-05-18",
+    "lugar": "Valonia y Bruselas",
+    "tipo_accion": "huelga",
+    "organizaciones": ["CSC Enseignement", "SETCa-SEL"],
+    "motivo": "Huelga de docentes de la Federación Valonia-Bruselas del 18 al 27 de mayo contra medidas de austeridad: aumento del 10% de horas lectivas sin ajuste salarial y endurecimiento de bajas laborales.",
+    "status": "en_curso",
+    "lat": 50.8467,
+    "lng": 4.3525,
+    "fuentes": [
+      {"nombre": "The Brussels Times", "url": "https://www.brusselstimes.com/belgium/2134432/fwb-teachers-strike-called-for-18-27-may"}
+    ]
+  },
+  {
+    "pais": "Francia",
+    "bandera": "🇫🇷",
+    "hora": "06:00",
+    "fecha": "2026-05-14",
+    "lugar": "Aeropuertos de toda Francia",
+    "tipo_accion": "huelga",
+    "organizaciones": ["SNCTA"],
+    "motivo": "Huelga nacional de controladores aéreos de 3 días (14-16 mayo) coincidiendo con el puente de la Ascensión. Cancelaciones masivas de vuelos en París-CDG, Orly, Lyon, Niza y Marsella. Hasta 75% de vuelos cancelados en Orly.",
+    "status": "finalizado",
+    "lat": 48.8566,
+    "lng": 2.3522,
+    "fuentes": [
+      {"nombre": "VisaHQ News", "url": "https://www.visahq.com/news/2026-05-12/fr/french-air-traffic-controllers-call-14-16-may-strike-threatening-long-weekend-chaos"},
+      {"nombre": "Strike Tracker", "url": "https://striketracker.app/strikes-in-france/airport-strike-france-14-16-may-2026"}
+    ]
+  }
+]
