@@ -23,6 +23,10 @@ export const redaccionAgentesTable = pgTable("redaccion_agentes", {
   nombre: text("nombre").notNull(),
   tareas: jsonb("tareas").notNull().$type<string[]>(),
   agenteId: text("agente_id"),
+  tipo: text("tipo").notNull().default("coberturas"),
+  topics: jsonb("topics").$type<string[]>(),
+  periodo: integer("periodo").notNull().default(0),
+  ultimaEjecucion: timestamp("ultima_ejecucion"),
   activo: integer("activo").notNull().default(1),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -34,6 +38,7 @@ export const coberturasTable = pgTable("coberturas", {
   contenido: text("contenido").notNull(),
   autor: text("autor"),
   tags: jsonb("tags").$type<string[]>(),
+  seccion: text("seccion"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

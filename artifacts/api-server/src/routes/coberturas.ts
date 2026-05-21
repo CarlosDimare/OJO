@@ -5,12 +5,15 @@ import { eq } from "drizzle-orm";
 
 const router = Router();
 
-// GET /api/coberturas
+// GET /api/coberturas?seccion=...
 router.get("/coberturas", async (_req: Request, res: Response) => {
   try {
+    const { seccion } = _req.query as { seccion?: string };
+    const filter = seccion ? eq(coberturasTable.seccion, seccion) : undefined;
     const rows = await db
       .select()
       .from(coberturasTable)
+      .where(filter)
       .orderBy(coberturasTable.createdAt);
     return res.json(rows);
   } catch (err) {
@@ -42,11 +45,12 @@ router.get("/coberturas/:id", async (req: Request, res: Response) => {
 // POST /api/coberturas
 router.post("/coberturas", async (req: Request, res: Response) => {
   try {
-    const { titulo, contenido, autor, tags } = req.body as {
+    const { titulo, contenido, autor, tags, seccion } = req.body as {
       titulo?: string;
       contenido?: string;
       autor?: string;
       tags?: string[];
+      seccion?: string;
     };
     const [row] = await db
       .insert(coberturasTable)
@@ -55,6 +59,7 @@ router.post("/coberturas", async (req: Request, res: Response) => {
         contenido: contenido || "",
         autor: autor || null,
         tags: tags || [],
+        seccion: seccion || null,
       })
       .returning();
     return res.json(row);
@@ -70,7 +75,7 @@ router.put("/coberturas/:id", async (req: Request, res: Response) => {
     if (Number.isNaN(id)) {
       return res.status(400).json({ error: "invalid id" });
     }
-    const allowed = ["titulo", "contenido", "autor", "tags"];
+    const allowed = ["titulo", "contenido", "autor", "tags", "seccion"];
     const update: Record<string, unknown> = { updatedAt: new Date() };
     for (const key of allowed) {
       if (req.body[key] !== undefined) {

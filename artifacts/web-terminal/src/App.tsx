@@ -260,6 +260,22 @@ function useClock(): string {
   return time;
 }
 
+function timeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = now - then;
+  const seg = Math.floor(diff / 1000);
+  if (seg < 60) return `${seg}s`;
+  const min = Math.floor(seg / 60);
+  if (min < 60) return `${min}min`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d`;
+  const months = Math.floor(days / 30);
+  return `${months}mes`;
+}
+
 interface ChatMessage { role: "user" | "bot"; text: string; html?: string; }
 interface VoiceMessage { role: "user" | "bot"; text: string; }
 type View = "terminal" | "chat" | "voz" | "portal" | "redaccion";
@@ -347,7 +363,8 @@ const STYLES = `
 
 /* ══════════════════════════════════════════════════════════════════ */
 export default function App() {
-  const [view, setView]       = useState<View>("chat");
+  const isPublic = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("public") === "true";
+  const [view, setView]       = useState<View>(isPublic ? "portal" : "chat");
   const [menuOpen, setMenuOpen] = useState(false);
   const clock                 = useClock();
 
@@ -385,7 +402,7 @@ export default function App() {
   const [modalHtml, setModalHtml]       = useState("");
 
   /* portal */
-  const [portalTab, setPortalTab]           = useState<"internacionales" | "protestas_ar">("internacionales");
+  const [portalTab, setPortalTab]           = useState<string | null>(null);
   const [acciones, setAcciones]             = useState<Accion[]>([]);
   const [portalLoading, setPortalLoading]   = useState(false);
   const [selectedAccion, setSelectedAccion] = useState<Accion | null>(null);
@@ -393,6 +410,23 @@ export default function App() {
   const [portalNoticias, setPortalNoticias] = useState<{ titular: string; url: string; fuente: string }[]>([]);
   const [portalNoticiasLoading, setPortalNoticiasLoading] = useState(false);
   const [portalRefreshLoading, setPortalRefreshLoading] = useState(false);
+
+  /* cobertura detail modal */
+  const [coberturaDetailOpen, setCoberturaDetailOpen] = useState(false);
+  const [selectedCobertura, setSelectedCobertura] = useState<any | null>(null);
+
+  /* editing accion from portal detail */
+  const [editingAccion, setEditingAccion] = useState(false);
+  const [editAccionForm, setEditAccionForm] = useState<Record<string, any>>({});
+
+  /* creating new agent */
+  const [showNewAgentForm, setShowNewAgentForm] = useState(false);
+  const [newAgentForm, setNewAgentForm] = useState({ nombre: "", agenteId: "", tareas: "", tipo: "coberturas", topics: "", periodo: "0" });
+  /* editing agent topics/periodo */
+  const [editingTopics, setEditingTopics] = useState<number | null>(null);
+  const [editTopicsValue, setEditTopicsValue] = useState("");
+  const [editingPeriodo, setEditingPeriodo] = useState<number | null>(null);
+  const [editPeriodoValue, setEditPeriodoValue] = useState("");
 
   /* agent status */
   const [agentStatus, setAgentStatus] = useState<{ enabled: boolean; running: string[]; scheduled: boolean } | null>(null);
@@ -421,10 +455,19 @@ export default function App() {
   const [coberturaForm, setCoberturaForm] = useState({ titulo: "", contenido: "", autor: "", tags: "" });
   const [showCoberturasEditor, setShowCoberturasEditor] = useState(false);
   const [triggeringAgent, setTriggeringAgent] = useState<string | null>(null);
-  const [ejecutandoTask, setEjecutandoTask] = useState<number | null>(null);
   const [ejecucionLog, setEjecucionLog] = useState<string>("");
   const [editingAgenteId, setEditingAgenteId] = useState<number | null>(null);
   const [editAgenteIdValue, setEditAgenteIdValue] = useState("");
+  const [investigarTema, setInvestigarTema] = useState("");
+  const [redaccionTab, setRedaccionTab] = useState<"secciones" | "agentes">("secciones");
+  const [editTareasValue, setEditTareasValue] = useState("");
+
+  useEffect(() => {
+    if (selectedRedaccionAgent) {
+      setEditTareasValue((selectedRedaccionAgent.tareas || []).join("\n"));
+      setEditTopicsValue((selectedRedaccionAgent.topics || []).join("\n"));
+    }
+  }, [selectedRedaccionAgent]);
 
   /* voz */
   const voiceStoppedRef          = useRef(false);
@@ -740,9 +783,21 @@ export default function App() {
     } catch {} finally { setPortalNoticiasLoading(false); }
   }, []);
 
-  // Auto-refresh portal every 60s when portal view is active
+  // Set initial portalTab to first section
   useEffect(() => {
     if (view !== "portal") return;
+    const sections = redaccionAgentes.filter((a: any) => a.tipo === "acciones" || a.agenteId);
+    if (sections.length > 0) {
+      const firstId = sections[0].agenteId || sections[0].nombre;
+      if (!portalTab || !sections.some((s: any) => (s.agenteId || s.nombre) === portalTab)) {
+        setPortalTab(firstId);
+      }
+    }
+  }, [view, redaccionAgentes, portalTab]);
+
+  // Auto-refresh portal every 60s when portal view is active
+  useEffect(() => {
+    if (view !== "portal" || !portalTab) return;
     fetchAcciones(portalTab);
     const id = setInterval(() => fetchAcciones(portalTab), 60_000);
     return () => clearInterval(id);
@@ -805,19 +860,21 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (view !== "redaccion") return;
+    if (view !== "redaccion" && view !== "portal") return;
     fetchRedaccion();
-    const id = setInterval(fetchRedaccion, 8000);
-    // Auto-seed if empty
-    fetch("/api/redaccion").then(async (r) => {
-      if (r.ok) {
-        const rows = await r.json();
-        if (rows.length === 0) {
-          await fetch("/api/redaccion/sembrar", { method: "POST" });
-          fetchRedaccion();
+    const id = setInterval(fetchRedaccion, 15000);
+    if (view === "redaccion") {
+      // Auto-seed if empty
+      fetch("/api/redaccion").then(async (r) => {
+        if (r.ok) {
+          const rows = await r.json();
+          if (rows.length === 0) {
+            await fetch("/api/redaccion/sembrar", { method: "POST" });
+            fetchRedaccion();
+          }
         }
-      }
-    });
+      });
+    }
     return () => clearInterval(id);
   }, [view, fetchRedaccion]);
 
@@ -1043,20 +1100,77 @@ export default function App() {
     setTimeout(() => setTriggeringAgent(null), 2000);
   }, []);
 
-  const ejecutarTarea = useCallback(async (agent: any, tareaIndice?: number) => {
-    const key = tareaIndice !== undefined ? `task-${tareaIndice}` : "all";
-    if (tareaIndice !== undefined) {
-      setEjecutandoTask(tareaIndice);
-    } else {
-      setTriggeringAgent(`custom-${agent.id}`);
+  const crearAgente = useCallback(async () => {
+    if (!newAgentForm.nombre.trim()) return;
+    const body: Record<string, unknown> = { nombre: newAgentForm.nombre.trim() };
+    if (newAgentForm.agenteId.trim()) body.agenteId = newAgentForm.agenteId.trim();
+    const tareas = newAgentForm.tareas.split("\n").map((t) => t.trim()).filter(Boolean);
+    if (tareas.length > 0) body.tareas = tareas;
+    body.tipo = newAgentForm.tipo;
+    const topics = newAgentForm.topics.split("\n").map((t) => t.trim()).filter(Boolean);
+    if (topics.length > 0) body.topics = topics;
+    body.periodo = parseInt(newAgentForm.periodo) || 0;
+    await fetch("/api/redaccion", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    setNewAgentForm({ nombre: "", agenteId: "", tareas: "", tipo: "coberturas", topics: "", periodo: "0" });
+    setShowNewAgentForm(false);
+    fetchRedaccion();
+  }, [newAgentForm, fetchRedaccion]);
+
+  const saveAccionEdit = useCallback(async () => {
+    if (!selectedAccion) return;
+    const body: Record<string, unknown> = {};
+    for (const key of ["pais", "bandera", "hora", "fecha", "lugar", "tipoAccion", "motivo", "status", "lat", "lng", "seccion"]) {
+      if (editAccionForm[key] !== undefined) body[key] = editAccionForm[key];
     }
+    if (editAccionForm.organizaciones !== undefined) {
+      body.organizaciones = typeof editAccionForm.organizaciones === "string"
+        ? editAccionForm.organizaciones.split(",").map((s: string) => s.trim()).filter(Boolean)
+        : editAccionForm.organizaciones;
+    }
+    if (editAccionForm.fuentes !== undefined) {
+      try { body.fuentes = typeof editAccionForm.fuentes === "string" ? JSON.parse(editAccionForm.fuentes) : editAccionForm.fuentes; } catch { body.fuentes = []; }
+    }
+    try {
+      const r = await fetch(`/api/acciones/${selectedAccion.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (r.ok) {
+        const updated = await r.json();
+        setSelectedAccion(updated);
+        setAcciones((prev) => prev.map((a) => a.id === updated.id ? updated : a));
+      }
+    } catch {}
+    setEditingAccion(false);
+  }, [selectedAccion, editAccionForm]);
+
+  const openCoberturaDetail = useCallback((c: any) => {
+    setSelectedCobertura(c);
+    setCoberturaDetailOpen(true);
+  }, []);
+
+  const deleteAccion = useCallback(async (id: number) => {
+    await fetch(`/api/acciones/${id}`, { method: "DELETE" });
+    setAcciones((prev) => prev.filter((a) => a.id !== id));
+    setPortalDetailOpen(false);
+    setSelectedAccion(null);
+  }, []);
+
+  const ejecutarTarea = useCallback(async (agent: any, opts?: { tareaIndice?: number; tema?: string }) => {
+    const { tareaIndice, tema } = opts || {};
+    setTriggeringAgent(`custom-${agent.id}`);
     setEjecucionLog("");
 
     try {
       const r = await fetch(`/api/redaccion/ejecutar/${agent.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tareaIndice }),
+        body: JSON.stringify({ tareaIndice, tema }),
       });
 
       if (!r.ok) {
@@ -1095,7 +1209,6 @@ export default function App() {
     } catch {
       setEjecucionLog("Error al ejecutar la tarea");
     } finally {
-      setEjecutandoTask(null);
       setTriggeringAgent(null);
     }
   }, [fetchCoberturas]);
@@ -1106,7 +1219,7 @@ export default function App() {
       display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: MONO }}>
 
       {/* ════ NAV BAR ════ */}
-      <nav style={{ flexShrink: 0, background: "#0a0a0a", borderBottom: "3px solid #cc0000",
+      {!isPublic && <nav style={{ flexShrink: 0, background: "#0a0a0a", borderBottom: "3px solid #cc0000",
         display: "flex", alignItems: "stretch", height: 48, position: "relative" }}>
 
         {/* Red stripe */}
@@ -1261,46 +1374,96 @@ export default function App() {
             {clock}
           </span>
         </div>
-      </nav>
+      </nav>}
 
-      {/* ════ TERMINAL ════ */}
-      <div style={{ flex: view === "terminal" ? 1 : 0,
+      {!isPublic && <div style={{ flex: view === "terminal" ? 1 : 0,
         display: view === "terminal" ? "flex" : "none",
         flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
         <div ref={terminalRef} data-testid="terminal-container"
           style={{ flex: 1, padding: "6px 4px", overflow: "hidden" }} />
-      </div>
+      </div>}
 
       {/* ════ PORTAL ════ */}
       <div style={{ flex: view === "portal" ? 1 : 0,
         display: view === "portal" ? "flex" : "none",
         flexDirection: "column", overflow: "hidden", minHeight: 0, fontFamily: MONO }}>
 
-        {/* Tab bar */}
-        <div style={{ display: "flex", borderBottom: "2px solid #1a1a1a", flexShrink: 0 }}>
-          {[
-            { id: "internacionales" as const, label: "🌍 INTERNACIONAL" },
-            { id: "protestas_ar" as const, label: "🇦🇷 NACIONAL" },
-            { id: "coberturas" as const, label: "📋 COBERTURAS" },
-          ].map((tab) => (
-            <button key={tab.id} onClick={() => setPortalTab(tab.id)}
-              style={{
-                flex: 1, padding: "10px 0", border: "none", cursor: "pointer",
-                background: portalTab === tab.id ? "#cc0000" : "transparent",
-                color: portalTab === tab.id ? "#fff" : "#555",
-                fontSize: 11, fontWeight: 700, letterSpacing: ".15em",
-                textTransform: "uppercase", fontFamily: MONO,
-              }}>
-              {tab.label}
-            </button>
-          ))}
+        {/* ════ COBERTURAS STRIP (always visible at top) ════ */}
+        <div style={{ flexShrink: 0, borderBottom: "2px solid #cc0000" }}>
+          <div style={{ display: "flex", padding: "5px 12px", background: "#0d0d0d",
+            fontSize: 9, fontWeight: 700, color: "#cc0000",
+            letterSpacing: ".1em", textTransform: "uppercase" }}>
+            <span style={{ flex: 2 }}>COBERTURA</span>
+            <span style={{ flex: 3 }}>ÚLTIMA NOVEDAD</span>
+            <span style={{ width: 80, textAlign: "right" }}>HACE</span>
+          </div>
+          <div style={{ maxHeight: 180, overflowY: "auto" }}>
+            {coberturas.length === 0 && (
+              <div style={{ padding: "10px 12px", color: "#333", fontSize: 9, textAlign: "center" }}>
+                Sin coberturas aún
+              </div>
+            )}
+            {coberturas.map((c) => (
+              <div key={c.id} onClick={() => openCoberturaDetail(c)}
+                style={{
+                  display: "flex", padding: "6px 12px", borderBottom: "1px solid #141414",
+                  cursor: "pointer", fontSize: 10, color: "#ccc", alignItems: "center",
+                  transition: "background .1s",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "#111"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                <span style={{ flex: 2, fontWeight: 700, color: "#eee", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {c.titulo}
+                </span>
+                <span style={{ flex: 3, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 9 }}>
+                  {(c.contenido || "").replace(/<[^>]*>/g, "").slice(0, 100)}
+                </span>
+                <span style={{ width: 80, textAlign: "right", color: "#666", fontSize: 9 }}>
+                  {timeAgo(c.createdAt)}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Legend + Table + Rows (hidden when coberturas tab) */}
-        <div style={{ flex: portalTab === "coberturas" ? 0 : 1,
-          display: portalTab === "coberturas" ? "none" : "flex",
-          flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+        {/* Tab bar (dynamic from sections) */}
+        <div style={{ display: "flex", borderBottom: "2px solid #1a1a1a", flexShrink: 0 }}>
+          {(() => {
+            const sections = redaccionAgentes.filter((a: any) => a.tipo === "acciones" || a.agenteId);
+            if (sections.length === 0) {
+              return <div style={{ flex: 1, padding: "10px 12px", color: "#333", fontSize: 10, textAlign: "center" }}>Sin secciones configuradas</div>;
+            }
+            return sections.map((ag: any) => {
+              const tabId = ag.agenteId || ag.nombre;
+              return (
+                <button key={tabId} onClick={() => setPortalTab(tabId)}
+                  style={{
+                    flex: 1, padding: "10px 0", border: "none", cursor: "pointer",
+                    background: portalTab === tabId ? "#cc0000" : "transparent",
+                    color: portalTab === tabId ? "#fff" : "#555",
+                    fontSize: 11, fontWeight: 700, letterSpacing: ".15em",
+                    textTransform: "uppercase", fontFamily: MONO,
+                  }}>
+                  {ag.agenteId === "internacionales" ? "🌍 " : ag.agenteId === "protestas_ar" ? "🇦🇷 " : "📌 "}{ag.nombre.toUpperCase()}
+                </button>
+              );
+            });
+          })()}
+          <button onClick={triggerAgent} disabled={portalRefreshLoading}
+            style={{
+              padding: "10px 16px", border: "none", cursor: portalRefreshLoading ? "not-allowed" : "pointer",
+              background: portalRefreshLoading ? "#111" : "transparent",
+              color: portalRefreshLoading ? "#333" : "#cc0000",
+              fontSize: 9, fontWeight: 700, letterSpacing: ".1em",
+              textTransform: "uppercase", fontFamily: MONO,
+              borderLeft: "1px solid #1a1a1a",
+            }}>
+            {portalRefreshLoading ? "↻" : "↻ REFRESCAR"}
+          </button>
+        </div>
 
+        {/* Legend + Table */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
           {/* Legend */}
           <div style={{ display: "flex", gap: 14, padding: "6px 12px", borderBottom: "1px solid #1a1a1a",
             flexShrink: 0, fontSize: 9, color: "#555", letterSpacing: ".08em", textTransform: "uppercase" }}>
@@ -1359,330 +1522,325 @@ export default function App() {
               })}
           </div>
         </div>
-
-    {/* ════ COBERTURAS TAB ════ */}
-    <div style={{ flex: portalTab === "coberturas" ? 1 : 0,
-      display: portalTab === "coberturas" ? "flex" : "none",
-      flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
-
-      {/* List */}
-      <div style={{ flex: 1, overflowY: "auto", fontFamily: MONO }}>
-        {coberturas.length === 0 && (
-          <div style={{ textAlign: "center", padding: 40, color: "#444", fontSize: 10 }}>
-            Sin coberturas aún.
-          </div>
-        )}
-        {coberturas.map((c) => (
-          <div key={c.id} style={{
-            padding: "10px 12px", borderBottom: "1px solid #141414",
-            borderLeft: "3px solid #cc0000", background: "#0d0d0d",
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#eee", marginBottom: 4 }}>{c.titulo}</div>
-            <div style={{ fontSize: 10, color: "#888", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{c.contenido}</div>
-            <div style={{ display: "flex", gap: 6, marginTop: 6, fontSize: 8, color: "#555" }}>
-              {c.autor && <span>✎ {c.autor}</span>}
-              {(c.tags || []).map((t: string, i: number) => (
-                <span key={i} style={{ background: "#111", padding: "1px 5px", textTransform: "uppercase" }}>{t}</span>
-              ))}
-            </div>
-          </div>
-        ))}
       </div>
-    </div>
-  </div>
 
-  {/* ════ REDACCIÓN ════ */}
-  <div style={{ flex: view === "redaccion" ? 1 : 0,
+  {!isPublic && <div style={{ flex: view === "redaccion" ? 1 : 0,
     display: view === "redaccion" ? "flex" : "none",
     flexDirection: "column", overflow: "hidden", minHeight: 0, fontFamily: MONO }}>
 
-    {/* Agent table */}
-    <div style={{ flex: selectedRedaccionAgent ? "0 0 auto" : 1, overflowY: "auto" }}>
-      {/* Header row */}
-      <div style={{ display: "flex", padding: "6px 12px", borderBottom: "2px solid #cc0000",
-        flexShrink: 0, fontSize: 9, fontWeight: 700, color: "#cc0000",
-        letterSpacing: ".1em", textTransform: "uppercase", background: "#0a0a0a" }}>
-        <span style={{ minWidth: 160, flex: 1 }}>AGENTE</span>
-        <span style={{ minWidth: 140, flex: 1 }}>ACTIVIDAD</span>
-        <span style={{ width: 80, flexShrink: 0, textAlign: "right" }}>TAREAS</span>
-      </div>
-
-      {redaccionAgentes.length === 0 && (
-        <div style={{ textAlign: "center", padding: 40, color: "#555", fontSize: 11 }}>
-          Sin agentes. Creá uno o activá los existentes.
-        </div>
-      )}
-      {redaccionAgentes.map((ag) => (
-        <div key={ag.id} onClick={() => setSelectedRedaccionAgent(selectedRedaccionAgent?.id === ag.id ? null : ag)}
-          style={{
-            display: "flex", padding: "8px 12px", borderBottom: "1px solid #141414",
-            cursor: "pointer", fontSize: 11, color: "#ccc", alignItems: "center",
-            transition: "background .1s",
-            background: selectedRedaccionAgent?.id === ag.id ? "#111" : "transparent",
-            borderLeft: selectedRedaccionAgent?.id === ag.id ? "3px solid #cc0000" : "3px solid transparent",
-          }}
-          onMouseEnter={(e) => { if (selectedRedaccionAgent?.id !== ag.id) e.currentTarget.style.background = "#0d0d0d"; }}
-          onMouseLeave={(e) => { if (selectedRedaccionAgent?.id !== ag.id) e.currentTarget.style.background = "transparent"; }}>
-          <span style={{ minWidth: 160, flex: 1, fontWeight: 700, color: "#eee" }}>{ag.nombre}</span>
-          <span style={{ minWidth: 140, flex: 1, fontSize: 10, color: actividadPorAgente[ag.agenteId || ""] ? "#e8c030" : "#555" }}>
-            {actividadPorAgente[ag.agenteId || ""] || (ag.agenteId ? "esperando..." : "—")}
-          </span>
-          <span style={{ width: 80, flexShrink: 0, textAlign: "right", fontSize: 10, color: "#666" }}>
-            {ag.tareas.length}
-          </span>
-        </div>
-      ))}
+    {/* Sub-tabs: Secciones / Agentes */}
+    <div style={{ display: "flex", borderBottom: "1px solid #1a1a1a", flexShrink: 0 }}>
+      <button onClick={() => { setRedaccionTab("secciones"); setSelectedRedaccionAgent(null); }}
+        style={{ flex: 1, padding: "8px 0", border: "none", cursor: "pointer",
+          background: redaccionTab === "secciones" ? "#0d0d0d" : "#080808",
+          color: redaccionTab === "secciones" ? "#cc0000" : "#555",
+          fontSize: 10, fontWeight: 700, letterSpacing: ".1em",
+          textTransform: "uppercase", fontFamily: MONO,
+          borderBottom: redaccionTab === "secciones" ? "2px solid #cc0000" : "2px solid transparent",
+        }}>
+        SECCIONES ({redaccionAgentes.length})
+      </button>
+      <button onClick={() => { setRedaccionTab("agentes"); }}
+        style={{ flex: 1, padding: "8px 0", border: "none", cursor: "pointer",
+          background: redaccionTab === "agentes" ? "#0d0d0d" : "#080808",
+          color: redaccionTab === "agentes" ? "#cc0000" : "#555",
+          fontSize: 10, fontWeight: 700, letterSpacing: ".1em",
+          textTransform: "uppercase", fontFamily: MONO,
+          borderBottom: redaccionTab === "agentes" ? "2px solid #cc0000" : "2px solid transparent",
+        }}>
+        AGENTES
+      </button>
     </div>
 
-    {/* Detail panel (expanded agent) */}
-    {selectedRedaccionAgent && (
-      <div style={{ borderTop: "2px solid #cc0000", background: "#0d0d0d",
-        overflowY: "auto", flex: 1, padding: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          {editingName === selectedRedaccionAgent.id ? (
-            <input autoFocus value={editNameValue}
-              onChange={(e) => setEditNameValue(e.target.value)}
-              onBlur={() => saveAgentName(selectedRedaccionAgent.id)}
-              onKeyDown={(e) => { if (e.key === "Enter") saveAgentName(selectedRedaccionAgent.id); }}
-              style={{ flex: 1, background: "#111", border: "1px solid #cc0000", color: "#eee",
-                fontSize: 14, fontWeight: 700, padding: "6px 8px", fontFamily: MONO, outline: "none" }} />
-          ) : (
-            <>
-              <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: "#eee",
-                letterSpacing: ".04em" }}>{selectedRedaccionAgent.nombre}</span>
-              <button onClick={() => { setEditingName(selectedRedaccionAgent.id); setEditNameValue(selectedRedaccionAgent.nombre); }}
-                style={{ background: "none", border: "1px solid #333", color: "#888", cursor: "pointer", fontSize: 10, padding: "4px 8px" }}>✎ EDITAR NOMBRE</button>
-            </>
-          )}
-          <button onClick={() => setSelectedRedaccionAgent(null)}
-            style={{ background: "none", border: "1px solid #e83030", color: "#e83030", cursor: "pointer", fontSize: 9, padding: "4px 8px" }}>
-            CERRAR ×
+    {redaccionTab === "secciones" ? (
+      /* ═══════════════════ SECCIONES ═══════════════════ */
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        <div style={{ display: "flex", padding: "6px 12px", borderBottom: "2px solid #cc0000",
+          flexShrink: 0, fontSize: 9, fontWeight: 700, color: "#cc0000",
+          letterSpacing: ".1em", textTransform: "uppercase", background: "#0a0a0a" }}>
+          <span style={{ flex: 1 }}>SECCIÓN</span>
+          <span style={{ width: 100, textAlign: "center" }}>TIPO</span>
+          <button onClick={() => setShowNewAgentForm((p) => !p)}
+            style={{ marginLeft: "auto", background: showNewAgentForm ? "#cc0000" : "none",
+              border: showNewAgentForm ? "none" : "1px solid #cc0000",
+              color: showNewAgentForm ? "#fff" : "#cc0000",
+              cursor: "pointer", padding: "2px 10px", fontSize: 8, fontWeight: 700,
+              letterSpacing: ".1em", textTransform: "uppercase", fontFamily: MONO, marginRight: 4 }}>
+            {showNewAgentForm ? "×" : "+ NUEVA"}
           </button>
         </div>
 
-        {/* Linked agent status */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 10, fontSize: 10, color: "#666", alignItems: "center" }}>
-          {editingAgenteId === selectedRedaccionAgent.id ? (
-            <input autoFocus value={editAgenteIdValue}
-              onChange={(e) => setEditAgenteIdValue(e.target.value)}
-              onBlur={() => saveAgenteId(selectedRedaccionAgent.id)}
-              onKeyDown={(e) => { if (e.key === "Enter") saveAgenteId(selectedRedaccionAgent.id); }}
-              style={{ flex: 1, background: "#111", border: "1px solid #444", color: "#ccc",
-                fontSize: 10, padding: "4px 6px", fontFamily: MONO, outline: "none" }} />
-          ) : (
-            <span style={{ background: "#111", padding: "2px 6px", letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" }}
-              onClick={() => { setEditingAgenteId(selectedRedaccionAgent.id); setEditAgenteIdValue(selectedRedaccionAgent.agenteId || ""); }}>
-              ⟳ {selectedRedaccionAgent.agenteId || "sin vínculo"}
-            </span>
-          )}
-          {selectedRedaccionAgent.agenteId && actividadPorAgente[selectedRedaccionAgent.agenteId] && (
-            <span style={{ color: "#e8c030" }}>{actividadPorAgente[selectedRedaccionAgent.agenteId]}</span>
-          )}
-          <span style={{ fontSize: 8, color: "#444" }}>click para cambiar</span>
-        </div>
-
-        {/* Tasks */}
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 9, fontWeight: 700, color: "#cc0000", letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 6 }}>
-            TAREAS
+        {showNewAgentForm && (
+          <div style={{ padding: "8px 12px", borderBottom: "2px solid #cc0000", background: "#0d0d0d" }}>
+            <input placeholder="Nombre de la sección" value={newAgentForm.nombre}
+              onChange={(e) => setNewAgentForm({ ...newAgentForm, nombre: e.target.value })}
+              style={{ width: "100%", background: "#111", border: "1px solid #1e1e1e", color: "#eee",
+                fontSize: 12, padding: "6px 8px", marginBottom: 4, fontFamily: MONO, outline: "none", boxSizing: "border-box" }} />
+            <div style={{ display: "flex", gap: 6 }}>
+              <select value={newAgentForm.tipo} onChange={(e) => setNewAgentForm({ ...newAgentForm, tipo: e.target.value })}
+                style={{ flex: 1, background: "#111", border: "1px solid #1e1e1e", color: "#888",
+                  fontSize: 10, padding: "4px 6px", fontFamily: MONO, outline: "none" }}>
+                <option value="coberturas">📋 Coberturas</option>
+                <option value="acciones">🌍 Acciones</option>
+              </select>
+              <button onClick={() => void crearAgente()}
+                disabled={!newAgentForm.nombre.trim()}
+                style={{
+                  background: newAgentForm.nombre.trim() ? "#cc0000" : "#111",
+                  color: newAgentForm.nombre.trim() ? "#fff" : "#333",
+                  border: "none", cursor: newAgentForm.nombre.trim() ? "pointer" : "not-allowed",
+                  padding: "6px 16px", fontSize: 10, fontWeight: 700, fontFamily: MONO,
+                }}>CREAR</button>
+            </div>
           </div>
-          {selectedRedaccionAgent.tareas.map((t: string, ti: number) => (
-            <div key={ti} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4, fontSize: 11 }}>
-              <span style={{ color: "#cc0000" }}>▸</span>
-              {editingTask === `${selectedRedaccionAgent.id}-${ti}` ? (
-                <input autoFocus value={editTaskValue}
-                  onChange={(e) => setEditTaskValue(e.target.value)}
-                  onBlur={() => saveTask(selectedRedaccionAgent.id, ti)}
-                  onKeyDown={(e) => { if (e.key === "Enter") saveTask(selectedRedaccionAgent.id, ti); }}
-                  style={{ flex: 1, background: "#111", border: "1px solid #444", color: "#ccc",
-                    fontSize: 11, padding: "4px 6px", fontFamily: MONO, outline: "none" }} />
-              ) : (
-                <>
-                  <span style={{ flex: 1, color: "#ccc" }}>{t}</span>
-                  {!selectedRedaccionAgent.agenteId && (
-                    <button onClick={() => void ejecutarTarea(selectedRedaccionAgent, ti)}
-                      disabled={ejecutandoTask === ti}
-                      style={{
-                        background: ejecutandoTask === ti ? "#111" : "none",
-                        border: "none", color: ejecutandoTask === ti ? "#333" : "#cc0000",
-                        cursor: ejecutandoTask === ti ? "not-allowed" : "pointer", fontSize: 9,
-                      }}>
-                      {ejecutandoTask === ti ? "▶" : "▶ EJECUTAR"}
-                    </button>
-                  )}
-                  <button onClick={() => { setEditingTask(`${selectedRedaccionAgent.id}-${ti}`); setEditTaskValue(t); }}
-                    style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 9 }}>✎</button>
-                  <button onClick={() => deleteTask(selectedRedaccionAgent.id, ti)}
-                    style={{ background: "none", border: "none", color: "#e83030", cursor: "pointer", fontSize: 9 }}>×</button>
-                </>
-              )}
-            </div>
-          ))}
-          <button onClick={() => addTask(selectedRedaccionAgent.id)}
-            style={{ background: "none", border: "1px dashed #333", color: "#555", cursor: "pointer",
-              fontSize: 10, padding: "3px 10px", marginTop: 4, width: "100%" }}>
-            + AGREGAR TAREA
-          </button>
-        </div>
+        )}
 
-        {/* Ejecutar */}
-        <div style={{ marginBottom: 10 }}>
-          {selectedRedaccionAgent.agenteId ? (
-            <>
-              <button onClick={() => triggerAgentById(selectedRedaccionAgent.agenteId)}
-                disabled={triggeringAgent === selectedRedaccionAgent.agenteId}
-                style={{
-                  width: "100%", padding: "8px 0", border: "none", cursor: "pointer",
-                  background: triggeringAgent === selectedRedaccionAgent.agenteId ? "#111" : "#cc0000",
-                  color: triggeringAgent === selectedRedaccionAgent.agenteId ? "#333" : "#fff",
-                  fontSize: 11, fontWeight: 700, letterSpacing: ".12em",
-                  textTransform: "uppercase", fontFamily: MONO,
-                }}>
-                {triggeringAgent === selectedRedaccionAgent.agenteId
-                  ? "▶ EJECUTANDO..."
-                  : "▶ EJECUTAR (PUBLICAR ACCIONES)"}
-              </button>
-              <div style={{ fontSize: 8, color: "#555", marginTop: 4, textAlign: "center" }}>
-                Busca acciones colectivas y las publica en el Portal
-              </div>
-            </>
-          ) : (
-            <>
-              <button onClick={() => void ejecutarTarea(selectedRedaccionAgent)}
-                disabled={triggeringAgent === `custom-${selectedRedaccionAgent.id}`}
-                style={{
-                  width: "100%", padding: "8px 0", border: "none", cursor: "pointer",
-                  background: triggeringAgent === `custom-${selectedRedaccionAgent.id}` ? "#111" : "#cc0000",
-                  color: triggeringAgent === `custom-${selectedRedaccionAgent.id}` ? "#333" : "#fff",
-                  fontSize: 11, fontWeight: 700, letterSpacing: ".12em",
-                  textTransform: "uppercase", fontFamily: MONO,
-                }}>
-                {triggeringAgent === `custom-${selectedRedaccionAgent.id}`
-                  ? "▶ INVESTIGANDO..."
-                  : "▶ EJECUTAR TODAS LAS TAREAS"}
-              </button>
-              <div style={{ fontSize: 8, color: "#555", marginTop: 4, textAlign: "center" }}>
-                El agente investiga y publica una nota en Coberturas
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Ejecución log */}
-        {ejecucionLog && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 9, fontWeight: 700, color: "#cc0000", letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 4 }}>
-              RESULTADO
-            </div>
-            <div style={{
-              fontSize: 10, color: "#ccc", lineHeight: 1.6, whiteSpace: "pre-wrap",
-              background: "#080808", padding: 8, border: "1px solid #1a1a1a",
-              maxHeight: 200, overflowY: "auto",
+        {redaccionAgentes.length === 0 && (
+          <div style={{ textAlign: "center", padding: 40, color: "#555", fontSize: 11 }}>
+            Sin secciones. Creá una nueva.
+          </div>
+        )}
+        {redaccionAgentes.map((ag) => (
+          <div key={ag.id}
+            style={{ display: "flex", padding: "8px 12px", borderBottom: "1px solid #141414",
+              alignItems: "center", fontSize: 11, color: "#ccc" }}>
+            <span style={{ flex: 1, fontWeight: 700, color: "#eee" }}>{ag.nombre}</span>
+            <span style={{
+              width: 100, textAlign: "center",
+              color: ag.tipo === "acciones" ? "#5a9a3a" : "#cc0000",
+              fontSize: 9, fontWeight: 700, letterSpacing: ".08em",
             }}>
-              {ejecucionLog}
-            </div>
+              {ag.tipo === "acciones" ? "ACCIONES" : "COBERTURAS"}
+            </span>
+            <button onClick={() => deleteAgente(ag.id)}
+              style={{ background: "none", border: "1px solid #e83030", color: "#e83030",
+                cursor: "pointer", fontSize: 9, padding: "2px 8px" }}>
+              ELIMINAR
+            </button>
           </div>
-        )}
-
-        {/* Activity log */}
-        {selectedRedaccionAgent.agenteId && (
-          <div>
-            <div style={{ fontSize: 9, fontWeight: 700, color: "#cc0000", letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 6 }}>
-              ACTIVIDAD RECIENTE
-            </div>
-            <div style={{ fontSize: 10, color: "#666", maxHeight: 100, overflowY: "auto", lineHeight: 1.8 }}>
-              {actividad[selectedRedaccionAgent.agenteId]?.slice(0, 10).map((act, ai) => (
-                <div key={ai} style={{
-                  color: act.type === "error" ? "#e83030" : act.type === "done" ? "#3a9a3a" : "#888",
-                }}>
-                  {act.time} {act.msg}
-                </div>
-              ))}
-              {(!actividad[selectedRedaccionAgent.agenteId] || actividad[selectedRedaccionAgent.agenteId].length === 0) && (
-                <span style={{ color: "#444" }}>Sin actividad registrada</span>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div style={{ marginTop: 14, borderTop: "1px solid #1a1a1a", paddingTop: 10 }}>
-          <button onClick={() => { deleteAgente(selectedRedaccionAgent.id); setSelectedRedaccionAgent(null); }}
-            style={{ background: "none", border: "1px solid #e83030", color: "#e83030", cursor: "pointer",
-              fontSize: 9, padding: "4px 10px" }}>
-            ELIMINAR AGENTE
-          </button>
+        ))}
+      </div>
+    ) : (
+      /* ═══════════════════ AGENTES ═══════════════════ */
+      <>
+      <div style={{ flex: selectedRedaccionAgent ? "0 0 auto" : 1, overflowY: "auto" }}>
+        <div style={{ display: "flex", padding: "6px 12px", borderBottom: "2px solid #cc0000",
+          flexShrink: 0, fontSize: 9, fontWeight: 700, color: "#cc0000",
+          letterSpacing: ".1em", textTransform: "uppercase", background: "#0a0a0a" }}>
+          <span style={{ minWidth: 160, flex: 1 }}>AGENTE</span>
+          <span style={{ minWidth: 100, flex: 1 }}>SECCIÓN</span>
+          <span style={{ width: 60, flexShrink: 0, textAlign: "right" }}>TIPO</span>
         </div>
-      </div>
-    )}
 
-    {/* Coberturas editor */}
-    <div style={{ borderTop: "1px solid #1a1a1a", flexShrink: 0 }}>
-      <div
-        onClick={() => setShowCoberturasEditor((p) => !p)}
-        style={{ display: "flex", alignItems: "center", padding: "7px 12px", cursor: "pointer",
-          background: "#0a0a0a", gap: 8, userSelect: "none" }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: "#cc0000", letterSpacing: ".1em",
-          textTransform: "uppercase" }}>
-          {showCoberturasEditor ? "▼" : "▶"} COBERTURAS
-        </span>
-        <span style={{ fontSize: 8, color: "#555" }}>editar notas publicadas</span>
-      </div>
-      {showCoberturasEditor && (
-        <div style={{ padding: "8px 12px", borderBottom: "2px solid #cc0000", background: "#0d0d0d" }}>
-          <div style={{ fontSize: 9, fontWeight: 700, color: "#cc0000", letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 6, fontFamily: MONO }}>
-            {coberturaEditing ? "EDITAR COBERTURA" : "NUEVA COBERTURA"}
+        {redaccionAgentes.length === 0 && (
+          <div style={{ textAlign: "center", padding: 40, color: "#555", fontSize: 11 }}>
+            Sin agentes. Creá una sección primero.
           </div>
-          <input placeholder="Título" value={coberturaForm.titulo}
-            onChange={(e) => setCoberturaForm({ ...coberturaForm, titulo: e.target.value })}
-            style={{ width: "100%", background: "#111", border: "1px solid #1e1e1e", color: "#eee",
-              fontSize: 12, padding: "6px 8px", marginBottom: 4, fontFamily: MONO, outline: "none", boxSizing: "border-box" }} />
-          <textarea placeholder="Contenido de la cobertura..." value={coberturaForm.contenido}
-            onChange={(e) => setCoberturaForm({ ...coberturaForm, contenido: e.target.value })}
-            rows={3}
-            style={{ width: "100%", background: "#111", border: "1px solid #1e1e1e", color: "#ccc",
-              fontSize: 11, padding: "6px 8px", marginBottom: 4, fontFamily: MONO, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
-          <div style={{ display: "flex", gap: 6 }}>
-            <input placeholder="Autor" value={coberturaForm.autor}
-              onChange={(e) => setCoberturaForm({ ...coberturaForm, autor: e.target.value })}
-              style={{ flex: 1, background: "#111", border: "1px solid #1e1e1e", color: "#888",
-                fontSize: 10, padding: "4px 6px", fontFamily: MONO, outline: "none" }} />
-            <input placeholder="Tags (coma separados)" value={coberturaForm.tags}
-              onChange={(e) => setCoberturaForm({ ...coberturaForm, tags: e.target.value })}
-              style={{ flex: 2, background: "#111", border: "1px solid #1e1e1e", color: "#888",
-                fontSize: 10, padding: "4px 6px", fontFamily: MONO, outline: "none" }} />
-            <button onClick={() => void saveCobertura()}
-              disabled={!coberturaForm.titulo.trim()}
-              style={{
-                background: coberturaForm.titulo.trim() ? "#cc0000" : "#111",
-                color: coberturaForm.titulo.trim() ? "#fff" : "#333",
-                border: "none", cursor: coberturaForm.titulo.trim() ? "pointer" : "not-allowed",
-                padding: "4px 12px", fontSize: 10, fontWeight: 700, fontFamily: MONO,
-              }}>{coberturaEditing ? "GUARDAR" : "PUBLICAR"}</button>
-            {coberturaEditing && (
-              <button onClick={() => { setCoberturaEditing(null); setCoberturaForm({ titulo: "", contenido: "", autor: "", tags: "" }); }}
-                style={{ background: "none", border: "1px solid #333", color: "#888", cursor: "pointer", padding: "4px 8px", fontSize: 9, fontFamily: MONO }}>
-                CANCELAR
-              </button>
+        )}
+        {redaccionAgentes.map((ag) => (
+          <div key={ag.id} onClick={() => setSelectedRedaccionAgent(selectedRedaccionAgent?.id === ag.id ? null : ag)}
+            style={{
+              display: "flex", padding: "8px 12px", borderBottom: "1px solid #141414",
+              cursor: "pointer", fontSize: 11, color: "#ccc", alignItems: "center",
+              transition: "background .1s",
+              background: selectedRedaccionAgent?.id === ag.id ? "#111" : "transparent",
+              borderLeft: selectedRedaccionAgent?.id === ag.id ? "3px solid #cc0000" : "3px solid transparent",
+            }}
+            onMouseEnter={(e) => { if (selectedRedaccionAgent?.id !== ag.id) e.currentTarget.style.background = "#0d0d0d"; }}
+            onMouseLeave={(e) => { if (selectedRedaccionAgent?.id !== ag.id) e.currentTarget.style.background = "transparent"; }}>
+            <span style={{ minWidth: 160, flex: 1, fontWeight: 700, color: "#eee" }}>{"Agente " + ag.nombre}</span>
+            <span style={{ minWidth: 100, flex: 1, fontSize: 10, color: "#888" }}>{ag.nombre}</span>
+            <span style={{ width: 60, flexShrink: 0, textAlign: "right", fontSize: 9, fontWeight: 700,
+              color: ag.tipo === "acciones" ? "#5a9a3a" : "#cc0000" }}>
+              {ag.tipo === "acciones" ? "ACCI" : "COBERT"}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Detail panel */}
+      {selectedRedaccionAgent && (
+        <div style={{ borderTop: "2px solid #cc0000", background: "#0d0d0d",
+          overflowY: "auto", flex: 1, padding: 12 }}>
+
+          {/* Header: nombre + tipo badge + close */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            {editingName === selectedRedaccionAgent.id ? (
+              <input autoFocus value={editNameValue}
+                onChange={(e) => setEditNameValue(e.target.value)}
+                onBlur={() => saveAgentName(selectedRedaccionAgent.id)}
+                onKeyDown={(e) => { if (e.key === "Enter") saveAgentName(selectedRedaccionAgent.id); }}
+                style={{ flex: 1, background: "#111", border: "1px solid #cc0000", color: "#eee",
+                  fontSize: 14, fontWeight: 700, padding: "6px 8px", fontFamily: MONO, outline: "none" }} />
+            ) : (
+              <>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: "#eee",
+                  letterSpacing: ".04em" }}>{"Agente " + selectedRedaccionAgent.nombre}</span>
+                <span style={{
+                  background: selectedRedaccionAgent.tipo === "acciones" ? "#1a3a1a" : "#3a1a1a",
+                  color: selectedRedaccionAgent.tipo === "acciones" ? "#5a9a3a" : "#cc0000",
+                  padding: "2px 8px", fontWeight: 700, fontSize: 9, letterSpacing: ".08em", textTransform: "uppercase",
+                }}>
+                  {selectedRedaccionAgent.tipo === "acciones" ? "🌍 ACCIONES" : "📋 COBERTURAS"}
+                </span>
+                <button onClick={() => { setEditingName(selectedRedaccionAgent.id); setEditNameValue(selectedRedaccionAgent.nombre); }}
+                  style={{ background: "none", border: "1px solid #333", color: "#888", cursor: "pointer", fontSize: 10, padding: "4px 8px" }}>✎</button>
+                <button onClick={() => setSelectedRedaccionAgent(null)}
+                  style={{ background: "none", border: "1px solid #e83030", color: "#e83030", cursor: "pointer", fontSize: 9, padding: "4px 8px" }}>
+                  × CERRAR
+                </button>
+              </>
             )}
           </div>
-          {/* mini-list para editar/borrar */}
-          <div style={{ marginTop: 10 }}>
-            {coberturas.map((c) => (
-              <div key={c.id} style={{
-                display: "flex", alignItems: "center", gap: 6, padding: "5px 0",
-                borderBottom: "1px solid #141414", fontSize: 11, color: "#aaa",
-              }}>
-                <span style={{ flex: 1, color: "#eee" }}>{c.titulo}</span>
-                <button onClick={() => { setCoberturaEditing(c); setCoberturaForm({ titulo: c.titulo, contenido: c.contenido, autor: c.autor || "", tags: (c.tags || []).join(", ") }); }}
-                  style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 10 }}>✎</button>
-                <button onClick={() => deleteCobertura(c.id)}
-                  style={{ background: "none", border: "none", color: "#e83030", cursor: "pointer", fontSize: 10 }}>×</button>
+
+          {/* Periodo + ultima ejecucion */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 10, fontSize: 10, color: "#666", alignItems: "center" }}>
+            {editingPeriodo === selectedRedaccionAgent.id ? (
+              <>
+                <span style={{ color: "#555" }}>⏱ Periodo (min):</span>
+                <input autoFocus value={editPeriodoValue}
+                  onChange={(e) => setEditPeriodoValue(e.target.value)}
+                  onBlur={async () => {
+                    if (editPeriodoValue !== String(selectedRedaccionAgent.periodo)) {
+                      await fetch(`/api/redaccion/${selectedRedaccionAgent.id}`, {
+                        method: "PUT", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ periodo: parseInt(editPeriodoValue) || 0 }),
+                      });
+                      fetchRedaccion();
+                    }
+                    setEditingPeriodo(null);
+                  }}
+                  onKeyDown={async (e) => {
+                    if (e.key === "Enter") {
+                      if (editPeriodoValue !== String(selectedRedaccionAgent.periodo)) {
+                        await fetch(`/api/redaccion/${selectedRedaccionAgent.id}`, {
+                          method: "PUT", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ periodo: parseInt(editPeriodoValue) || 0 }),
+                        });
+                        fetchRedaccion();
+                      }
+                      setEditingPeriodo(null);
+                    }
+                  }}
+                  style={{ width: 60, background: "#111", border: "1px solid #444", color: "#ccc",
+                    fontSize: 10, padding: "2px 6px", fontFamily: MONO, outline: "none", textAlign: "center" }} />
+                <button onClick={() => setEditingPeriodo(null)}
+                  style={{ background: "none", border: "1px solid #333", color: "#888", cursor: "pointer", padding: "2px 8px", fontSize: 9 }}>OK</button>
+              </>
+            ) : (
+              <span style={{ cursor: "pointer", background: "#111", padding: "2px 6px" }}
+                onClick={() => { setEditingPeriodo(selectedRedaccionAgent.id); setEditPeriodoValue(String(selectedRedaccionAgent.periodo)); }}>
+                ⏱ {selectedRedaccionAgent.periodo > 0 ? `c/${selectedRedaccionAgent.periodo}min` : "manual"}
+              </span>
+            )}
+            {selectedRedaccionAgent.ultimaEjecucion && (
+              <span style={{ color: "#555", fontSize: 8 }}>últ: {timeAgo(selectedRedaccionAgent.ultimaEjecucion)}</span>
+            )}
+          </div>
+
+          {/* System prompt — solo para secciones de acciones */}
+          {selectedRedaccionAgent.tipo === "acciones" && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: "#cc0000", letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 4 }}>
+              SYSTEM PROMPT
+            </div>
+            <textarea value={editTareasValue}
+              onChange={(e) => setEditTareasValue(e.target.value)}
+              rows={4}
+              placeholder="Instrucciones para el agente (una por línea)"
+              style={{ width: "100%", background: "#111", border: "1px solid #444", color: "#ccc",
+                fontSize: 10, padding: "4px 6px", fontFamily: MONO, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
+            <div style={{ display: "flex", gap: 4, marginTop: 4 }}>
+              <button onClick={async () => {
+                const tareas = editTareasValue.split("\n").map((t) => t.trim()).filter(Boolean);
+                await fetch(`/api/redaccion/${selectedRedaccionAgent.id}`, {
+                  method: "PUT", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ tareas }),
+                });
+                fetchRedaccion();
+              }}
+                style={{ background: "#cc0000", color: "#fff", border: "none", cursor: "pointer", padding: "4px 10px", fontSize: 9, fontWeight: 700 }}>
+                GUARDAR
+              </button>
+            </div>
+          </div>
+          )}
+
+          {/* Action: INVESTIGAR (coberturas) / EJECUTAR (acciones) */}
+          <div style={{ marginBottom: 10 }}>
+            {selectedRedaccionAgent.tipo === "acciones" || selectedRedaccionAgent.agenteId ? (
+              <>
+                <button onClick={() => triggerAgentById(selectedRedaccionAgent.agenteId)}
+                  disabled={triggeringAgent === selectedRedaccionAgent.agenteId}
+                  style={{
+                    width: "100%", padding: "8px 0", border: "none", cursor: "pointer",
+                    background: triggeringAgent === selectedRedaccionAgent.agenteId ? "#111" : "#cc0000",
+                    color: triggeringAgent === selectedRedaccionAgent.agenteId ? "#333" : "#fff",
+                    fontSize: 11, fontWeight: 700, letterSpacing: ".12em",
+                    textTransform: "uppercase", fontFamily: MONO,
+                  }}>
+                  {triggeringAgent === selectedRedaccionAgent.agenteId
+                    ? "▶ EJECUTANDO..."
+                    : "▶ EJECUTAR (PUBLICAR ACCIONES)"}
+                </button>
+                <div style={{ fontSize: 8, color: "#555", marginTop: 4, textAlign: "center" }}>
+                  Busca acciones colectivas y las publica en el Portal
+                </div>
+              </>
+            ) : (
+              <div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                  <input placeholder="Tema a investigar..." value={investigarTema}
+                    onChange={(e) => setInvestigarTema(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && investigarTema.trim()) void ejecutarTarea(selectedRedaccionAgent, { tema: investigarTema }); }}
+                    style={{ flex: 1, background: "#111", border: "1px solid #444", color: "#ccc",
+                      fontSize: 11, padding: "6px 8px", fontFamily: MONO, outline: "none" }} />
+                  <button onClick={() => { const t = investigarTema; if (t.trim()) void ejecutarTarea(selectedRedaccionAgent, { tema: t }); }}
+                    disabled={triggeringAgent === `custom-${selectedRedaccionAgent.id}` || !investigarTema.trim()}
+                    style={{
+                      background: triggeringAgent === `custom-${selectedRedaccionAgent.id}` || !investigarTema.trim() ? "#111" : "#cc0000",
+                      color: triggeringAgent === `custom-${selectedRedaccionAgent.id}` || !investigarTema.trim() ? "#333" : "#fff",
+                      border: "none", cursor: triggeringAgent === `custom-${selectedRedaccionAgent.id}` || !investigarTema.trim() ? "not-allowed" : "pointer",
+                      padding: "6px 16px", fontSize: 11, fontWeight: 700, fontFamily: MONO,
+                    }}>
+                    {triggeringAgent === `custom-${selectedRedaccionAgent.id}` ? "▶ INVESTIGANDO..." : "▶ INVESTIGAR"}
+                  </button>
+                </div>
+                <div style={{ fontSize: 8, color: "#555", textAlign: "center" }}>
+                  El agente investiga el tema y publica una nota en Coberturas
+                </div>
               </div>
-            ))}
+            )}
+          </div>
+
+          {/* Result log */}
+          {ejecucionLog && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "#cc0000", letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 4 }}>
+                RESULTADO
+              </div>
+              <div style={{
+                fontSize: 10, color: "#ccc", lineHeight: 1.6, whiteSpace: "pre-wrap",
+                background: "#080808", padding: 8, border: "1px solid #1a1a1a",
+                maxHeight: 200, overflowY: "auto",
+              }}>
+                {ejecucionLog}
+              </div>
+            </div>
+          )}
+
+          {/* Delete */}
+          <div style={{ marginTop: 14, borderTop: "1px solid #1a1a1a", paddingTop: 10 }}>
+            <button onClick={() => { deleteAgente(selectedRedaccionAgent.id); setSelectedRedaccionAgent(null); }}
+              style={{ background: "none", border: "1px solid #e83030", color: "#e83030", cursor: "pointer",
+                fontSize: 9, padding: "4px 10px" }}>
+              ELIMINAR SECCIÓN
+            </button>
           </div>
         </div>
       )}
-    </div>
+      </>
+    )}
 
     {/* Jefe Editor chat */}
     <div style={{ borderTop: "2px solid #cc0000", display: "flex", flexDirection: "column",
@@ -1692,7 +1850,7 @@ export default function App() {
         <span style={{ fontSize: 10, fontWeight: 700, color: "#cc0000", letterSpacing: ".1em",
           textTransform: "uppercase" }}>JEFE EDITOR</span>
         <span style={{ fontSize: 8, color: "#555" }}>consultá sobre cobertura y estrategia</span>
-        <button onClick={() => { setView("portal"); setPortalTab("coberturas"); }}
+        <button onClick={() => { setView("portal"); }}
           style={{ marginLeft: "auto", background: "none", border: "1px solid #333", color: "#666",
             cursor: "pointer", fontSize: 8, padding: "2px 6px" }}>
           📋 VER PUBLICADAS
@@ -1756,11 +1914,10 @@ export default function App() {
           }}>→</button>
       </div>
     </div>
-  </div>
-
+  </div>}
 
   {/* ════ CHAT ════ */}
-      <div style={{ flex: view === "chat" ? 1 : 0,
+      {!isPublic && <div style={{ flex: view === "chat" ? 1 : 0,
         display: view === "chat" ? "flex" : "none",
         flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
 
@@ -1912,10 +2069,10 @@ export default function App() {
             </svg>
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* ════ VOZ ════ */}
-      <div style={{ flex: view === "voz" ? 1 : 0,
+      {!isPublic && <div style={{ flex: view === "voz" ? 1 : 0,
         display: view === "voz" ? "flex" : "none",
         flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
 
@@ -2002,7 +2159,7 @@ export default function App() {
             {voiceActive ? "■ DETENER" : "● INICIAR"}
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* ════ MODAL ════ */}
       {modalOpen && (
@@ -2180,11 +2337,36 @@ export default function App() {
                 letterSpacing: ".12em", textTransform: "uppercase" }}>
                 {selectedAccion.bandera} {selectedAccion.lugar}
               </span>
-              <button onClick={() => setPortalDetailOpen(false)}
-                style={{ background: "none", border: "none", color: "#555",
-                  cursor: "pointer", fontSize: 18 }}>
-                ✕
-              </button>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {!editingAccion && !isPublic && (
+                  <button onClick={() => { setEditingAccion(true); setEditAccionForm({ pais: selectedAccion.pais, bandera: selectedAccion.bandera, hora: selectedAccion.hora, fecha: selectedAccion.fecha, lugar: selectedAccion.lugar, tipoAccion: selectedAccion.tipoAccion, status: selectedAccion.status, organizaciones: selectedAccion.organizaciones.join(", "), motivo: selectedAccion.motivo, fuentes: JSON.stringify(selectedAccion.fuentes), lat: selectedAccion.lat, lng: selectedAccion.lng }); }}
+                    style={{ background: "none", border: "1px solid #555", color: "#888", cursor: "pointer", fontSize: 9, padding: "4px 8px" }}>
+                    ✎ EDITAR
+                  </button>
+                )}
+                {editingAccion && (
+                  <button onClick={() => { void saveAccionEdit(); }}
+                    style={{ background: "#cc0000", color: "#fff", border: "none", cursor: "pointer", fontSize: 9, padding: "4px 10px", fontWeight: 700 }}>
+                    GUARDAR
+                  </button>
+                )}
+                {editingAccion && (
+                  <button onClick={() => setEditingAccion(false)}
+                    style={{ background: "none", border: "1px solid #555", color: "#888", cursor: "pointer", fontSize: 9, padding: "4px 8px" }}>
+                    CANCELAR
+                  </button>
+                )}
+                {!isPublic && (
+                  <button onClick={() => deleteAccion(selectedAccion.id)}
+                    style={{ background: "none", border: "1px solid #e83030", color: "#e83030", cursor: "pointer", fontSize: 9, padding: "4px 8px" }}>
+                    ×
+                  </button>
+                )}
+                <button onClick={() => setPortalDetailOpen(false)}
+                  style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 18 }}>
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* Body */}
@@ -2192,28 +2374,69 @@ export default function App() {
               {/* Detail grid */}
               <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "6px 12px", fontSize: 12 }}>
                 <span style={{ color: "#555", textTransform: "uppercase", letterSpacing: ".08em" }}>Hora</span>
-                <span style={{ color: "#d0d0d0" }}>{selectedAccion.hora} hs</span>
+                {editingAccion ? (
+                  <input value={editAccionForm.hora || ""} onChange={(e) => setEditAccionForm({ ...editAccionForm, hora: e.target.value })}
+                    style={{ background: "#111", border: "1px solid #444", color: "#ccc", fontSize: 11, padding: "2px 6px", fontFamily: MONO, outline: "none" }} />
+                ) : (
+                  <span style={{ color: "#d0d0d0" }}>{selectedAccion.hora} hs</span>
+                )}
                 <span style={{ color: "#555", textTransform: "uppercase", letterSpacing: ".08em" }}>Fecha</span>
-                <span style={{ color: "#d0d0d0" }}>{selectedAccion.fecha}</span>
+                {editingAccion ? (
+                  <input value={editAccionForm.fecha || ""} onChange={(e) => setEditAccionForm({ ...editAccionForm, fecha: e.target.value })}
+                    style={{ background: "#111", border: "1px solid #444", color: "#ccc", fontSize: 11, padding: "2px 6px", fontFamily: MONO, outline: "none" }} />
+                ) : (
+                  <span style={{ color: "#d0d0d0" }}>{selectedAccion.fecha}</span>
+                )}
                 <span style={{ color: "#555", textTransform: "uppercase", letterSpacing: ".08em" }}>Lugar</span>
-                <span style={{ color: "#d0d0d0" }}>{selectedAccion.pais} — {selectedAccion.lugar}</span>
+                {editingAccion ? (
+                  <input value={editAccionForm.lugar || ""} onChange={(e) => setEditAccionForm({ ...editAccionForm, lugar: e.target.value })}
+                    style={{ background: "#111", border: "1px solid #444", color: "#ccc", fontSize: 11, padding: "2px 6px", fontFamily: MONO, outline: "none" }} />
+                ) : (
+                  <span style={{ color: "#d0d0d0" }}>{selectedAccion.pais} — {selectedAccion.lugar}</span>
+                )}
                 <span style={{ color: "#555", textTransform: "uppercase", letterSpacing: ".08em" }}>Tipo</span>
-                <span style={{ color: "#d0d0d0", textTransform: "uppercase", fontSize: 10 }}>{selectedAccion.tipoAccion}</span>
+                {editingAccion ? (
+                  <input value={editAccionForm.tipoAccion || ""} onChange={(e) => setEditAccionForm({ ...editAccionForm, tipoAccion: e.target.value })}
+                    style={{ background: "#111", border: "1px solid #444", color: "#ccc", fontSize: 11, padding: "2px 6px", fontFamily: MONO, outline: "none" }} />
+                ) : (
+                  <span style={{ color: "#d0d0d0", textTransform: "uppercase", fontSize: 10 }}>{selectedAccion.tipoAccion}</span>
+                )}
                 <span style={{ color: "#555", textTransform: "uppercase", letterSpacing: ".08em" }}>Status</span>
-                <span style={{
-                  color: selectedAccion.status === "en_curso" ? "#e8c030" : selectedAccion.status === "finalizado" ? "#cc0000" : "#3a9a3a",
-                  textTransform: "uppercase", fontSize: 10, fontWeight: 700,
-                }}>
-                  {selectedAccion.status === "en_curso" ? "🟡 EN CURSO" : selectedAccion.status === "finalizado" ? "🔴 FINALIZADO" : "🟢 PROGRAMADO"}
-                </span>
+                {editingAccion ? (
+                  <select value={editAccionForm.status || "programado"} onChange={(e) => setEditAccionForm({ ...editAccionForm, status: e.target.value })}
+                    style={{ background: "#111", border: "1px solid #444", color: "#ccc", fontSize: 11, padding: "2px 6px", fontFamily: MONO, outline: "none" }}>
+                    <option value="programado">🟢 Programado</option>
+                    <option value="en_curso">🟡 En curso</option>
+                    <option value="finalizado">🔴 Finalizado</option>
+                  </select>
+                ) : (
+                  <span style={{
+                    color: selectedAccion.status === "en_curso" ? "#e8c030" : selectedAccion.status === "finalizado" ? "#cc0000" : "#3a9a3a",
+                    textTransform: "uppercase", fontSize: 10, fontWeight: 700,
+                  }}>
+                    {selectedAccion.status === "en_curso" ? "🟡 EN CURSO" : selectedAccion.status === "finalizado" ? "🔴 FINALIZADO" : "🟢 PROGRAMADO"}
+                  </span>
+                )}
                 <span style={{ color: "#555", textTransform: "uppercase", letterSpacing: ".08em" }}>Organizaciones</span>
-                <span style={{ color: "#d0d0d0" }}>{selectedAccion.organizaciones.join(", ") || "—"}</span>
+                {editingAccion ? (
+                  <input value={editAccionForm.organizaciones || ""} onChange={(e) => setEditAccionForm({ ...editAccionForm, organizaciones: e.target.value })}
+                    placeholder="separadas por coma"
+                    style={{ background: "#111", border: "1px solid #444", color: "#ccc", fontSize: 11, padding: "2px 6px", fontFamily: MONO, outline: "none" }} />
+                ) : (
+                  <span style={{ color: "#d0d0d0" }}>{selectedAccion.organizaciones.join(", ") || "—"}</span>
+                )}
                 <span style={{ color: "#555", textTransform: "uppercase", letterSpacing: ".08em" }}>Motivo</span>
-                <span style={{ color: "#d0d0d0" }}>{selectedAccion.motivo}</span>
+                {editingAccion ? (
+                  <textarea value={editAccionForm.motivo || ""} onChange={(e) => setEditAccionForm({ ...editAccionForm, motivo: e.target.value })}
+                    rows={2}
+                    style={{ background: "#111", border: "1px solid #444", color: "#ccc", fontSize: 11, padding: "2px 6px", fontFamily: MONO, outline: "none", resize: "vertical" }} />
+                ) : (
+                  <span style={{ color: "#d0d0d0" }}>{selectedAccion.motivo}</span>
+                )}
               </div>
 
               {/* Fuentes */}
-              {selectedAccion.fuentes.length > 0 && (
+              {selectedAccion.fuentes.length > 0 && !editingAccion && (
                 <div style={{ marginTop: 16, borderTop: "1px solid #1a1a1a", paddingTop: 12 }}>
                   <div style={{ color: "#555", fontSize: 9, fontWeight: 700, letterSpacing: ".12em",
                     textTransform: "uppercase", marginBottom: 8 }}>Fuentes</div>
@@ -2264,6 +2487,73 @@ export default function App() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════ COBERTURA DETAIL MODAL ════ */}
+      {coberturaDetailOpen && selectedCobertura && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1000,
+          background: "rgba(0,0,0,.85)", display: "flex",
+          flexDirection: "column", alignItems: "center",
+          justifyContent: "center", padding: 20, fontFamily: MONO,
+        }} onClick={() => setCoberturaDetailOpen(false)}>
+          <div style={{
+            background: "#111", border: "2px solid #cc0000",
+            maxWidth: 800, width: "100%", maxHeight: "90vh",
+            display: "flex", flexDirection: "column",
+          }} onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{
+              display: "flex", justifyContent: "space-between",
+              alignItems: "center", padding: "12px 16px",
+              borderBottom: "1px solid #1a1a1a", flexShrink: 0,
+            }}>
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <span style={{ color: "#cc0000", fontWeight: 700, fontSize: 11,
+                  letterSpacing: ".12em", textTransform: "uppercase" }}>
+                  📋 {selectedCobertura.titulo}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {!isPublic && (
+                  <button onClick={() => { setCoberturaDetailOpen(false); setCoberturaEditing(selectedCobertura); setCoberturaForm({ titulo: selectedCobertura.titulo, contenido: selectedCobertura.contenido, autor: selectedCobertura.autor || "", tags: (selectedCobertura.tags || []).join(", ") }); setView("redaccion"); setShowCoberturasEditor(true); }}
+                    style={{ background: "none", border: "1px solid #555", color: "#888", cursor: "pointer", fontSize: 9, padding: "4px 8px" }}>
+                    ✎ EDITAR
+                  </button>
+                )}
+                {!isPublic && (
+                  <button onClick={() => { deleteCobertura(selectedCobertura.id); setCoberturaDetailOpen(false); }}
+                    style={{ background: "none", border: "1px solid #e83030", color: "#e83030", cursor: "pointer", fontSize: 9, padding: "4px 8px" }}>
+                    ×
+                  </button>
+                )}
+                <button onClick={() => setCoberturaDetailOpen(false)}
+                  style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: 18 }}>
+                  ✕
+                </button>
+              </div>
+            </div>
+            {/* Body */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px", fontFamily: SANS, fontSize: 13.5, lineHeight: 1.75, color: "#d0d0d0" }}>
+              {/* Meta */}
+              <div style={{ display: "flex", gap: 10, marginBottom: 12, fontSize: 10, color: "#666", flexWrap: "wrap" }}>
+                {selectedCobertura.autor && <span>✎ {selectedCobertura.autor}</span>}
+                <span>🕒 {timeAgo(selectedCobertura.createdAt)}</span>
+                <span>📅 {new Date(selectedCobertura.createdAt).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+              </div>
+              {/* Tags */}
+              {(selectedCobertura.tags || []).length > 0 && (
+                <div style={{ display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }}>
+                  {(selectedCobertura.tags || []).map((t: string, i: number) => (
+                    <span key={i} style={{ background: "#1a1a1a", color: "#888", padding: "2px 8px", fontSize: 9, textTransform: "uppercase", letterSpacing: ".08em" }}>{t}</span>
+                  ))}
+                </div>
+              )}
+              {/* Content rendered as markdown (same as chatbot) */}
+              <div dangerouslySetInnerHTML={{ __html: md(selectedCobertura.contenido) }} />
             </div>
           </div>
         </div>

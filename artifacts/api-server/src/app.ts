@@ -1,4 +1,5 @@
 import express, { type Express } from "express";
+import { resolve } from "path";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -30,5 +31,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// In production, serve the built frontend from web-terminal
+const frontendDist = resolve(__dirname, "../../web-terminal/dist/public");
+app.use(express.static(frontendDist));
+app.use((_req, res) => {
+  res.sendFile(resolve(frontendDist, "index.html"));
+});
 
 export default app;

@@ -30,10 +30,13 @@ router.get("/redaccion", async (_req: Request, res: Response) => {
 // POST /api/redaccion
 router.post("/redaccion", async (req: Request, res: Response) => {
   try {
-    const { nombre, tareas, agenteId } = req.body as {
+    const { nombre, tareas, agenteId, tipo, topics, periodo } = req.body as {
       nombre?: string;
       tareas?: string[];
       agenteId?: string | null;
+      tipo?: string;
+      topics?: string[];
+      periodo?: number;
     };
     const [row] = await db
       .insert(redaccionAgentesTable)
@@ -41,6 +44,9 @@ router.post("/redaccion", async (req: Request, res: Response) => {
         nombre: nombre || "Nuevo agente",
         tareas: tareas || [],
         agenteId: agenteId || null,
+        tipo: tipo || "coberturas",
+        topics: topics || [],
+        periodo: periodo || 0,
         activo: 1,
       })
       .returning();
@@ -57,17 +63,23 @@ router.put("/redaccion/:id", async (req: Request, res: Response) => {
     if (Number.isNaN(id)) {
       return res.status(400).json({ error: "invalid id" });
     }
-    const { nombre, tareas, agenteId, activo } = req.body as {
+    const { nombre, tareas, agenteId, activo, tipo, topics, periodo } = req.body as {
       nombre?: string;
       tareas?: string[];
       agenteId?: string | null;
       activo?: number;
+      tipo?: string;
+      topics?: string[];
+      periodo?: number;
     };
     const update: Record<string, unknown> = { updatedAt: new Date() };
     if (nombre !== undefined) update.nombre = nombre;
     if (tareas !== undefined) update.tareas = tareas;
     if (agenteId !== undefined) update.agenteId = agenteId;
     if (activo !== undefined) update.activo = activo;
+    if (tipo !== undefined) update.tipo = tipo;
+    if (topics !== undefined) update.topics = topics;
+    if (periodo !== undefined) update.periodo = periodo;
 
     const [row] = await db
       .update(redaccionAgentesTable)
@@ -112,27 +124,26 @@ router.post("/redaccion/sembrar", async (_req: Request, res: Response) => {
     }
     const defaults = [
       {
-        nombre: "Corresponsal Internacional",
+        nombre: "INTERNACIONAL",
         tareas: ["Seguir conflictos activos", "Reportar cumbres diplomáticas", "Analizar geopolítica"],
         agenteId: "internacionales",
+        tipo: "acciones",
         activo: 1,
       },
       {
-        nombre: "Cronista Argentina",
+        nombre: "NACIONAL",
         tareas: ["Cubrir protestas sociales", "Investigar medidas de gobierno", "Documentar movimientos sindicales"],
         agenteId: "protestas_ar",
+        tipo: "acciones",
         activo: 1,
       },
       {
-        nombre: "Editor de Datos",
-        tareas: ["Verificar cifras", "Cruzar fuentes estadísticas", "Preparar infografías"],
+        nombre: "COBERTURAS",
+        tareas: [],
         agenteId: null,
-        activo: 1,
-      },
-      {
-        nombre: "Reportero de Campo",
-        tareas: ["Entrevistas en terreno", "Cobertura de eventos", "Material audiovisual"],
-        agenteId: null,
+        tipo: "coberturas",
+        topics: ["Conflictos internacionales", "Política económica", "Tecnología y sociedad"],
+        periodo: 120,
         activo: 1,
       },
     ];
@@ -140,6 +151,37 @@ router.post("/redaccion/sembrar", async (_req: Request, res: Response) => {
       await db.insert(redaccionAgentesTable).values(a);
     }
     return res.json({ ok: true, count: defaults.length });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+// POST /api/redaccion/migrar — rename existing rows to match new naming
+router.post("/redaccion/migrar", async (_req: Request, res: Response) => {
+  try {
+    const renames: { id: number; nombre: string; tipo: string }[] = [];
+    const all = await db.select().from(redaccionAgentesTable).orderBy(redaccionAgentesTable.id);
+    const nameMap: Record<string, { nombre: string; tipo: string }> = {
+      "Corresponsal Internacional": { nombre: "INTERNACIONAL", tipo: "acciones" },
+      "Cronista Argentina": { nombre: "NACIONAL", tipo: "acciones" },
+      "Editor de Datos": { nombre: "COBERTURAS", tipo: "coberturas" },
+    };
+    for (const row of all) {
+      const mapped = nameMap[row.nombre];
+      if (mapped) {
+        await db.update(redaccionAgentesTable)
+          .set({ nombre: mapped.nombre, tipo: mapped.tipo })
+          .where(eq(redaccionAgentesTable.id, row.id));
+        renames.push({ id: row.id, ...mapped });
+      }
+    }
+    // remove rows not in the nameMap (extra ones like Reportero de Campo)
+    for (const row of all) {
+      if (!nameMap[row.nombre]) {
+        await db.delete(redaccionAgentesTable).where(eq(redaccionAgentesTable.id, row.id));
+      }
+    }
+    return res.json({ ok: true, renamed: renames });
   } catch (err) {
     return res.status(500).json({ error: String(err) });
   }
@@ -180,12 +222,12 @@ router.post("/redaccion/ejecutar/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "agent not found" });
     }
 
-    const { tareaIndice } = req.body as { tareaIndice?: number };
-    const tasks = tareaIndice !== undefined && agent.tareas[tareaIndice]
-      ? [agent.tareas[tareaIndice]]
-      : agent.tareas;
-
-    const promptText = tasks.join(". ");
+    const { tareaIndice, tema } = req.body as { tareaIndice?: number; tema?: string };
+    const promptText = tema
+      ? tema
+      : tareaIndice !== undefined && agent.tareas[tareaIndice]
+        ? agent.tareas[tareaIndice]
+        : agent.tareas.join(". ");
 
     const fullPrompt = `Sos un periodista de investigación del medio "CD" (Corresponsal Digital). Tu tarea específica es: ${promptText}
 
@@ -258,7 +300,7 @@ Instrucciones:
 
       if (botText.trim()) {
         try {
-          const titulo = tasks[0].slice(0, 120) || "Nota del agente";
+          const titulo = (tema || agent.tareas[0] || "Nota del agente").slice(0, 120);
           const [row] = await db
             .insert(coberturasTable)
             .values({
@@ -266,8 +308,12 @@ Instrucciones:
               contenido: botText.trim(),
               autor: agent.nombre,
               tags: [],
+              seccion: agent.agenteId || agent.nombre,
             })
             .returning();
+          await db.update(redaccionAgentesTable)
+            .set({ ultimaEjecucion: new Date() })
+            .where(eq(redaccionAgentesTable.id, agent.id));
           sendEvent("cobertura", { id: row.id, titulo: row.titulo });
           sendEvent("text", { text: `\n\n---\n✅ Nota publicada en Coberturas: "${titulo}"` });
         } catch (err) {

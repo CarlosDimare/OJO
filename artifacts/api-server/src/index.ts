@@ -4,6 +4,7 @@ import * as pty from "@homebridge/node-pty-prebuilt-multiarch";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startScheduler } from "./agents/scheduler";
+import { startRedaccionScheduler } from "./agents/scheduler-redaccion";
 
 const rawPort = process.env["PORT"];
 
@@ -89,4 +90,5 @@ wss.on("connection", (ws: WebSocket) => {
 server.listen(port, () => {
   logger.info({ port }, "Server listening");
   startScheduler();
+  startRedaccionScheduler();
 });
