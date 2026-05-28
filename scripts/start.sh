@@ -19,7 +19,7 @@ fi
 
 # Push database schema (create tables if they don't exist)
 echo "Pushing database schema..."
-pnpm --filter @workspace/db run push
+pnpm --filter @workspace/db run push-force
 
 # Start backend (which serves both API + frontend)
 export PORT
