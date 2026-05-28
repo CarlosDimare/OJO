@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 
 const MONO = '"Cascadia Code","Fira Code",Menlo,Consolas,monospace';
 const SANS = '-apple-system,"Segoe UI","Helvetica Neue",Arial,sans-serif';
+const ACCENT = "#ff7700";
 
 function esc(s: string): string {
   return s
@@ -225,8 +226,8 @@ const STYLES = `
   @keyframes pulse { 0%,100%{opacity:.2} 50%{opacity:1} }
   *::-webkit-scrollbar { width: 4px; }
   *::-webkit-scrollbar-track { background: #0a0a0a; }
-  *::-webkit-scrollbar-thumb { background: #cc0000; }
-  textarea::placeholder { color: #333; }
+  *::-webkit-scrollbar-thumb { background: ${ACCENT}; }
+  textarea::placeholder { color: #555; }
 
   .md-p   { margin: 0 0 .65em; line-height: 1.8; }
   .md-p:last-child { margin-bottom: 0; }
@@ -277,7 +278,7 @@ export default function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
-  const [charlaMode, setCharlaMode] = useState(false);
+  const [charlaMode, setCharlaMode] = useState(true);
   const msgsEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const chatMsgsRef = useRef<HTMLDivElement>(null);
@@ -322,7 +323,7 @@ export default function App() {
             setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: full, html: md(full) }; return n; });
           } else if (ev["type"] === "error") {
             setThinkingStatus(null);
-            setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: "", html: `<span style="color:#e83030">⚠ ${esc(ev["message"] as string)}</span>` }; return n; });
+            setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: "", html: `<span style="color:#ff4400">⚠ ${esc(ev["message"] as string)}</span>` }; return n; });
           }
         }
       }
@@ -380,17 +381,17 @@ export default function App() {
     <div style={{ width: "100vw", height: "100dvh", background: "#0a0a0a",
       display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: MONO }}>
 
-      <nav style={{ flexShrink: 0, background: "#0a0a0a", borderBottom: "3px solid #cc0000",
+      <nav style={{ flexShrink: 0, background: "#0a0a0a", borderBottom: "3px solid " + ACCENT,
         display: "flex", alignItems: "stretch", height: 48, position: "relative" }}>
 
-        <div style={{ width: 6, background: "#cc0000", flexShrink: 0 }} />
+        <div style={{ width: 6, background: ACCENT, flexShrink: 0 }} />
 
         <div style={{ paddingLeft: 14, paddingRight: 18, display: "flex",
           alignItems: "center", borderRight: "2px solid #1a1a1a", cursor: "pointer",
           position: "relative" }}
           onClick={() => setMenuOpen((p) => !p)}
           onMouseLeave={() => setMenuOpen(false)}>
-          <div style={{ width: 24, height: 24, background: "#cc0000",
+          <div style={{ width: 24, height: 24, background: ACCENT,
             display: "grid", placeItems: "center", transform: "rotate(45deg)", flexShrink: 0 }}>
             <img src="/ESTRELLA.svg" alt="✦"
               style={{ width: 16, height: 16, transform: "rotate(-45deg)", display: "block" }} />
@@ -399,7 +400,7 @@ export default function App() {
           {menuOpen && (
             <div style={{
               position: "absolute", top: 44, left: 0, zIndex: 999,
-              background: "#111", border: "2px solid #cc0000",
+              background: "#111", border: "2px solid " + ACCENT,
               minWidth: 180, fontFamily: MONO,
             }}>
               {[
@@ -436,9 +437,9 @@ export default function App() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", paddingLeft: 16 }}>
-          <span style={{ color: "#cc0000", fontSize: 11, fontWeight: 700,
+          <span style={{ color: charlaMode ? "#ff7700" : "#888", fontSize: 11, fontWeight: 700,
             letterSpacing: ".12em", textTransform: "uppercase", fontFamily: MONO }}>
-            ◈ PERIODISTA
+            ◈ {charlaMode ? "CHARLA" : "PERIODISTA"}
           </span>
         </div>
 
@@ -448,26 +449,26 @@ export default function App() {
             setSessionId(null);
             setConversationId(null);
           }}
-          title={charlaMode ? "Cambiar a modo periodista" : "Cambiar a modo charla"}
+          title={charlaMode ? "Activar modo periodista" : "Volver a modo charla"}
           style={{
             marginLeft: 16,
-            background: charlaMode ? "#fff" : "transparent",
-            color: charlaMode ? "#cc0000" : "#444",
-            border: charlaMode ? "none" : "1px solid #333",
+            background: charlaMode ? "transparent" : "#ff7700",
+            color: charlaMode ? "#555" : "#000",
+            border: "1px solid " + (charlaMode ? "#333" : "#ff7700"),
             padding: "3px 10px",
             fontSize: 10, fontWeight: 700, letterSpacing: ".1em",
             textTransform: "uppercase", cursor: "pointer",
             fontFamily: MONO, transition: "all .15s",
             whiteSpace: "nowrap",
           }}
-          onMouseEnter={(e) => { if (!charlaMode) e.currentTarget.style.borderColor = "#cc0000"; e.currentTarget.style.color = charlaMode ? "#cc0000" : "#cc0000"; }}
-          onMouseLeave={(e) => { if (!charlaMode) e.currentTarget.style.borderColor = "#333"; e.currentTarget.style.color = charlaMode ? "#cc0000" : "#444"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#ff7700"; e.currentTarget.style.color = charlaMode ? "#ff7700" : "#000"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = charlaMode ? "#333" : "#ff7700"; e.currentTarget.style.color = charlaMode ? "#555" : "#000"; }}
         >
-          {charlaMode ? "✦ CHARLA" : "○ CHARLA"}
+          {charlaMode ? "○ PERIODISTA" : "✦ PERIODISTA"}
         </button>
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", paddingRight: 16 }}>
-          <span style={{ color: "#cc0000", fontSize: 11, fontWeight: 700,
+          <span style={{ color: ACCENT, fontSize: 11, fontWeight: 700,
             letterSpacing: ".06em", fontFamily: MONO }}>
             {clock}
           </span>
@@ -481,13 +482,13 @@ export default function App() {
           {messages.length === 0 && (
             <div style={{ margin: "auto", textAlign: "center" }}>
               <div style={{ position: "relative", width: 64, height: 64, margin: "0 auto 14px" }}>
-                <div style={{ position: "absolute", inset: 0, border: "3px solid #cc0000" }} />
+                <div style={{ position: "absolute", inset: 0, border: "3px solid " + ACCENT }} />
                 <div style={{ position: "absolute", top: 7, left: 7, right: 7, bottom: 7,
-                  background: "#cc0000", display: "grid", placeItems: "center" }}>
+                  background: ACCENT, display: "grid", placeItems: "center" }}>
                   <span style={{ color: "#fff", fontSize: 22, fontWeight: 900 }}>✦</span>
                 </div>
               </div>
-              <p style={{ color: "#2a2a2a", fontSize: 10, fontWeight: 700,
+              <p style={{ color: "#553300", fontSize: 10, fontWeight: 700,
                 letterSpacing: ".18em", textTransform: "uppercase", fontFamily: MONO }}>
                 LISTO PARA ANALIZAR
               </p>
@@ -505,22 +506,22 @@ export default function App() {
             }}>
               <div style={{
                 width: 26, height: 26, flexShrink: 0,
-                background: m.role === "user" ? "#cc0000" : "#111",
-                border: m.role === "bot" ? "2px solid #cc0000" : "none",
+                background: m.role === "user" ? ACCENT : "#111",
+                border: m.role === "bot" ? "2px solid " + ACCENT : "none",
                 display: "grid", placeItems: "center",
-                color: m.role === "user" ? "#fff" : "#cc0000",
+                color: m.role === "user" ? "#000" : ACCENT,
                 fontWeight: 700, fontSize: 10, letterSpacing: ".05em", fontFamily: MONO,
               }}>
                 {m.role === "user" ? "U" : "A"}
               </div>
 
               <div style={{
-                background: m.role === "user" ? "#cc0000" : "#111",
-                borderLeft: m.role === "bot" ? "3px solid #cc0000" : undefined,
+                background: m.role === "user" ? ACCENT : "#111",
+                borderLeft: m.role === "bot" ? "3px solid " + ACCENT : undefined,
                 border: m.role === "bot" ? "1px solid #1a1a1a" : "none",
                 padding: "10px 14px",
                 maxWidth: "calc(100% - 48px)",
-                color: m.role === "user" ? "#fff" : "#d0d0d0",
+                color: m.role === "user" ? "#000" : "#d0d0d0",
                 fontSize: 13.5, lineHeight: 1.75,
                 wordBreak: "break-word", fontFamily: SANS,
               }}>
@@ -536,7 +537,7 @@ export default function App() {
                 ) : (
                   <span style={{ display: "inline-flex", gap: 5, alignItems: "center" }}>
                     {[0, .25, .5].map((d, j) => (
-                      <span key={j} style={{ width: 5, height: 5, background: "#cc0000",
+                      <span key={j} style={{ width: 5, height: 5, background: ACCENT,
                         display: "inline-block", animation: `pulse 1.2s ${d}s infinite` }} />
                     ))}
                   </span>
@@ -547,7 +548,7 @@ export default function App() {
           <div ref={msgsEndRef} />
         </div>
 
-        <div style={{ borderTop: "2px solid #cc0000", padding: "10px 16px 14px",
+        <div style={{ borderTop: "2px solid " + ACCENT, padding: "10px 16px 14px",
           background: "#0a0a0a", display: "flex", gap: 8, flexShrink: 0, alignItems: "flex-end" }}>
           <textarea
             ref={inputRef}
@@ -567,14 +568,14 @@ export default function App() {
               lineHeight: 1.5, outline: "none", overflow: "auto",
               transition: "border-color .15s",
             }}
-            onFocus={(e) => (e.target.style.borderColor = "#cc0000")}
+            onFocus={(e) => (e.target.style.borderColor = ACCENT)}
             onBlur={(e)  => (e.target.style.borderColor = "#1e1e1e")}
           />
           <button onClick={() => void sendMessage()}
             disabled={busy || !input.trim()}
             style={{
-              background: busy || !input.trim() ? "#111" : "#cc0000",
-              color: busy || !input.trim() ? "#333" : "#fff",
+              background: busy || !input.trim() ? "#111" : ACCENT,
+              color: busy || !input.trim() ? "#333" : "#000",
               border: "none", cursor: busy || !input.trim() ? "not-allowed" : "pointer",
               width: 40, height: 40, display: "grid", placeItems: "center",
               flexShrink: 0, transition: "background .15s",
@@ -597,7 +598,7 @@ export default function App() {
           justifyContent: "center", padding: 20, fontFamily: MONO,
         }} onClick={() => setHistoryOpen(false)}>
           <div style={{
-            background: "#111", border: "2px solid #cc0000",
+            background: "#111", border: "2px solid " + ACCENT,
             maxWidth: 600, width: "100%", maxHeight: "80vh",
             display: "flex", flexDirection: "column",
           }} onClick={(e) => e.stopPropagation()}>
@@ -606,7 +607,7 @@ export default function App() {
               alignItems: "center", padding: "12px 16px",
               borderBottom: "1px solid #1a1a1a", flexShrink: 0,
             }}>
-              <span style={{ color: "#cc0000", fontWeight: 700, fontSize: 11,
+              <span style={{ color: ACCENT, fontWeight: 700, fontSize: 11,
                 letterSpacing: ".12em", textTransform: "uppercase" }}>
                 ☰ HISTORIAL
               </span>
@@ -648,7 +649,7 @@ export default function App() {
                   </div>
                   <button onClick={() => loadConversation(c.id)}
                     style={{
-                      background: "#cc0000", color: "#fff", border: "none",
+                      background: ACCENT, color: "#000", border: "none",
                       padding: "5px 10px", cursor: "pointer", fontSize: 9,
                       fontWeight: 700, letterSpacing: ".1em",
                       textTransform: "uppercase", flexShrink: 0,
