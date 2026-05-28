@@ -4,8 +4,7 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 import type { Request, Response } from "express";
-import { db, conversationsTable, messagesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { store } from "../lib/store";
 
 // Prefer the local node_modules binary so it works in production deployments too
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -74,28 +73,15 @@ router.post("/chat", async (req: Request, res: Response) => {
   const isNewSession = !session_id;
   const fullMessage = buildMessage(message.trim(), isNewSession, charla_mode === true);
 
-  /* ── DB: save / resolve conversation ── */
+  /* ── Save / resolve conversation ── */
   let convId = conversation_id ? Number(conversation_id) : null;
-  try {
-    if (!convId) {
-      const [conv] = await db
-        .insert(conversationsTable)
-        .values({ title: message.trim().slice(0, 60), sessionId: session_id || null })
-        .returning({ id: conversationsTable.id });
-      convId = conv.id;
-    } else {
-      await db
-        .update(conversationsTable)
-        .set({ updatedAt: new Date() })
-        .where(eq(conversationsTable.id, convId));
-    }
-    await db
-      .insert(messagesTable)
-      .values({ conversationId: convId, role: "user", content: message.trim() });
-  } catch (err) {
-    res.status(500).json({ error: "DB error: " + String(err) });
-    return;
+  if (!convId) {
+    const conv = store.createConversation(message.trim().slice(0, 60), session_id || null);
+    convId = conv.id;
+  } else {
+    store.updateConversation(convId, { updatedAt: new Date() });
   }
+  store.createMessage(convId, "user", message.trim());
 
   const args = ["run", "--format", "json"];
   if (session_id) args.push("--session", session_id);
@@ -140,10 +126,7 @@ router.post("/chat", async (req: Request, res: Response) => {
         sessionSent = true;
         // Persist the opencode session ID so loaded conversations resume with full context
         if (convId) {
-          db.update(conversationsTable)
-            .set({ sessionId: sid })
-            .where(eq(conversationsTable.id, convId))
-            .catch(() => {});
+          store.updateConversation(convId, { sessionId: sid });
         }
       }
 
@@ -187,13 +170,9 @@ router.post("/chat", async (req: Request, res: Response) => {
     if (code !== 0 && stderrBuf.trim()) {
       res.write(sse({ type: "error", message: stderrBuf.trim().slice(0, 400) }));
     }
-    // Save bot response to DB
+    // Save bot response
     if (botContent.trim()) {
-      try {
-        await db
-          .insert(messagesTable)
-          .values({ conversationId: convId!, role: "bot", content: botContent.trim() });
-      } catch {}
+      store.createMessage(convId!, "bot", botContent.trim());
     }
     res.write(sse({ type: "done" }));
     res.end();
