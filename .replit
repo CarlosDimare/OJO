@@ -1,38 +1,14 @@
 modules = ["nodejs-24", "python-3.11"]
 
-[deployment]
-router = "application"
-deploymentTarget = "autoscale"
-
 [run]
-args = ["pnpm", "run", "start"]
-
-[deployment.postBuild]
-args = ["pnpm", "run", "build"]
-env = { "CI" = "true", "PORT" = "5000", "BASE_PATH" = "/" }
+args = ["bash", "scripts/start.sh"]
 
 [nix]
 channel = "stable-24_05"
 
 [[ports]]
 localPort = 5000
-externalPort = 5000
-
-[[ports]]
-localPort = 8081
-externalPort = 80
-
-[[ports]]
-localPort = 8082
 externalPort = 3000
-
-[[ports]]
-localPort = 8083
-externalPort = 3001
-
-[[ports]]
-localPort = 8084
-externalPort = 3002
 
 [agent]
 expertMode = true
