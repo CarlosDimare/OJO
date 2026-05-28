@@ -17,10 +17,6 @@ elif [ ! -f "artifacts/web-terminal/dist/public/index.html" ]; then
   PORT=5000 BASE_PATH=/ pnpm --filter @workspace/web-terminal run build
 fi
 
-# Push database schema (create tables if they don't exist)
-echo "Pushing database schema..."
-pnpm --filter @workspace/db run push-force
-
 # Start backend (which serves both API + frontend)
 export PORT
 exec node --enable-source-maps ./artifacts/api-server/dist/index.mjs
