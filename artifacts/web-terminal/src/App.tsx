@@ -295,10 +295,13 @@ export default function App() {
     setBusy(true); setInput(""); setThinkingStatus("...");
     setMessages((p) => [...p, { role: "user", text }, { role: "bot", text: "", html: "" }]);
     let full = ""; let cur = sessionId; let cid = conversationId;
+    const ac = new AbortController();
+    const overallTimer = setTimeout(() => ac.abort(), 180_000);
     try {
       const res = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, session_id: cur, conversation_id: cid, charla_mode: charlaMode }),
+        signal: ac.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const reader = res.body!.getReader(); const dec = new TextDecoder(); let buf = "";
@@ -328,7 +331,7 @@ export default function App() {
       const msg = err instanceof Error ? err.message : String(err);
       setThinkingStatus(null);
       setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: "", html: `<span style="color:#e83030">⚠ ${esc(msg)}</span>` }; return n; });
-    } finally { setBusy(false); setTimeout(() => inputRef.current?.focus(), 50); }
+    } finally { clearTimeout(overallTimer); setBusy(false); setTimeout(() => inputRef.current?.focus(), 50); }
   }, [input, busy, sessionId, conversationId, charlaMode]);
 
   const fetchConversations = useCallback(async () => {

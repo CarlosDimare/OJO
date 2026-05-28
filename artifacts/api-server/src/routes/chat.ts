@@ -5,11 +5,23 @@ import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 import type { Request, Response } from "express";
 import { store } from "../lib/store";
+import { logger } from "../lib/logger";
 
-// Prefer the local node_modules binary so it works in production deployments too
+// Resolve opencode binary — works in local dev, pnpm workspaces, and production
 const __dir = dirname(fileURLToPath(import.meta.url));
-const LOCAL_BIN = resolve(__dir, "../../node_modules/.bin/opencode");
-const OPENCODE = existsSync(LOCAL_BIN) ? LOCAL_BIN : "opencode";
+const CANDIDATES = [
+  // from src/routes/ (source) — ../../ = api-server/
+  resolve(__dir, "../../node_modules/.bin/opencode"),
+  // from dist/ (built) — ../ = api-server/
+  resolve(__dir, "../node_modules/.bin/opencode"),
+  resolve(__dir, "../../../node_modules/.bin/opencode"),
+  resolve(__dir, "../../../../node_modules/.bin/opencode"),
+  "/usr/local/bin/opencode",
+];
+const OPENCODE = CANDIDATES.find(existsSync) || "opencode";
+logger.info({ opencode: OPENCODE }, "chat route initialized");
+
+const OPENCODE_TIMEOUT_MS = 120_000; // 2 minutes
 
 const router = Router();
 
@@ -65,6 +77,9 @@ router.post("/chat", async (req: Request, res: Response) => {
     charla_mode?: boolean;
   };
 
+  const log = logger.child({ session_id, conversation_id, charla_mode });
+  log.info({ msgLen: message?.length }, "POST /chat received");
+
   if (!message?.trim()) {
     res.status(400).json({ error: "empty message" });
     return;
@@ -97,14 +112,28 @@ router.post("/chat", async (req: Request, res: Response) => {
   // Send conversation_id so frontend can track it
   res.write(sse({ type: "conversation", conversation_id: convId }));
 
+  /* ── Spawn opencode ── */
   let proc: ReturnType<typeof spawn>;
+  const startTime = Date.now();
+  log.info({ opencode: OPENCODE, args }, "spawning opencode");
+
   try {
-    proc = spawn(OPENCODE, args, { stdio: ["ignore", "pipe", "pipe"] });
+    proc = spawn(OPENCODE, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env },
+    });
   } catch (err: unknown) {
+    log.error({ err }, "failed to spawn opencode");
     res.write(sse({ type: "error", message: "opencode not found: " + String(err) }));
     res.end();
     return;
   }
+
+  /* ── Process timeout ── */
+  const killTimer = setTimeout(() => {
+    log.warn("opencode process timed out, killing");
+    try { proc.kill(9); } catch {}
+  }, OPENCODE_TIMEOUT_MS);
 
   let sessionSent = false;
   let botContent = "";
@@ -124,7 +153,6 @@ router.post("/chat", async (req: Request, res: Response) => {
         const sid = event["sessionID"] as string;
         res.write(sse({ type: "session", session_id: sid }));
         sessionSent = true;
-        // Persist the opencode session ID so loaded conversations resume with full context
         if (convId) {
           store.updateConversation(convId, { sessionId: sid });
         }
@@ -153,7 +181,6 @@ router.post("/chat", async (req: Request, res: Response) => {
 
       const part = (event["part"] ?? {}) as Record<string, unknown>;
 
-      // Only emit text events — skip tool_use noise
       if (evType === "text" && part["type"] === "text" && part["text"]) {
         const text = part["text"] as string;
         botContent += text;
@@ -167,10 +194,12 @@ router.post("/chat", async (req: Request, res: Response) => {
   proc.stderr!.on("data", (d: string) => { stderrBuf += d; });
 
   proc.on("close", async (code: number | null) => {
+    clearTimeout(killTimer);
+    const elapsed = Date.now() - startTime;
+    log.info({ code, elapsed, botLen: botContent.length, stderr: stderrBuf.slice(0, 200) }, "opencode closed");
     if (code !== 0 && stderrBuf.trim()) {
       res.write(sse({ type: "error", message: stderrBuf.trim().slice(0, 400) }));
     }
-    // Save bot response
     if (botContent.trim()) {
       store.createMessage(convId!, "bot", botContent.trim());
     }
@@ -179,11 +208,16 @@ router.post("/chat", async (req: Request, res: Response) => {
   });
 
   proc.on("error", (err: Error) => {
+    clearTimeout(killTimer);
+    log.error({ err }, "opencode process error");
     res.write(sse({ type: "error", message: err.message }));
     res.end();
   });
 
-  res.on("close", () => { try { proc.kill(); } catch {} });
+  res.on("close", () => {
+    clearTimeout(killTimer);
+    try { proc.kill(); } catch {}
+  });
 });
 
 export default router;
