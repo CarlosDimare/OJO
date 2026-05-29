@@ -700,18 +700,112 @@ export default function App() {
                       )}
                     </div>
                     {m.role === "bot" && m.text && !thinkingStatus && (
-                      <button onClick={() => navigator.clipboard.writeText(m.text)}
-                        title="Copiar respuesta"
-                        style={{
-                          alignSelf: "flex-start", marginTop: 4, marginLeft: 2,
-                          background: "none", border: "none", color: TEXT_MUTED,
-                          cursor: "pointer", fontSize: 10, fontFamily: SERIF,
-                          padding: "2px 6px", transition: "color .15s",
+                      <div style={{ display: "flex", gap: 8, marginTop: 4, marginLeft: 2 }}>
+                        <button onClick={async () => {
+                          try {
+                            const html = m.html || md(m.text);
+                            const doc = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><style>
+body{font-family:Georgia,'Times New Roman',serif;max-width:700px;margin:20px auto;padding:0 16px;color:#1a1a1a;font-size:14px;line-height:1.8}
+strong{color:#ce2b37}em{color:#555}
+pre{background:#fafafa;border:1px solid #e0e0e0;border-left:3px solid #ce2b37;padding:12px 16px;overflow-x:auto}
+code{background:#f0f0f0;padding:1px 5px;font-size:12.5px}
+blockquote{border-left:3px solid #ce2b37;margin:.45em 0;padding:.25em 0 .25em 1em;color:#666;font-style:italic}
+table{border-collapse:collapse;width:100%;margin:.6em 0;font-size:13px}
+th{background:#ce2b37;color:#fff;padding:6px 10px;text-align:left}
+td{padding:5px 10px;border:1px solid #e0e0e0}
+.cifra{background:#f6f6f6;border-left:4px solid #ce2b37;padding:14px 16px;margin:.6em 0}
+hr{border:none;border-top:1px solid #e0e0e0;margin:.75em 0}
+ul,ol{margin:.3em 0 .65em 1.5em}
+li{margin-bottom:.3em}
+img{max-width:280px;border:1px solid #e0e0e0}
+</style></head><body>${html}</body></html>`;
+                            await navigator.clipboard.write([
+                              new ClipboardItem({
+                                "text/html": new Blob([doc], { type: "text/html" }),
+                                "text/plain": new Blob([m.text], { type: "text/plain" }),
+                              }),
+                            ]);
+                          } catch {}
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.color = ACCENT; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.color = TEXT_MUTED; }}>
-                        📋 copiar
-                      </button>
+                          title="Copiar con formato"
+                          style={{
+                            background: "none", border: "none", color: TEXT_MUTED,
+                            cursor: "pointer", fontSize: 10, fontFamily: SERIF,
+                            padding: "2px 6px", transition: "color .15s",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.color = ACCENT; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = TEXT_MUTED; }}>
+                          📋 copiar
+                        </button>
+                        <button onClick={() => {
+                          try {
+                            const html = m.html || md(m.text);
+                            const doc = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>CD — ${m.text.slice(0, 60)}</title><style>
+body{font-family:Georgia,'Times New Roman',serif;max-width:700px;margin:40px auto;padding:0 20px;color:#1a1a1a;font-size:15px;line-height:1.8}
+strong{color:#ce2b37}em{color:#555}
+pre{background:#fafafa;border:1px solid #e0e0e0;border-left:3px solid #ce2b37;padding:12px 16px;overflow-x:auto}
+code{background:#f0f0f0;padding:1px 5px;font-size:13px}
+blockquote{border-left:3px solid #ce2b37;margin:.45em 0;padding:.25em 0 .25em 1em;color:#666;font-style:italic}
+table{border-collapse:collapse;width:100%;margin:.6em 0;font-size:13px}
+th{background:#ce2b37;color:#fff;padding:6px 10px;text-align:left}
+td{padding:5px 10px;border:1px solid #e0e0e0}
+.cifra{background:#f6f6f6;border-left:4px solid #ce2b37;padding:14px 16px;margin:.6em 0}
+hr{border:none;border-top:1px solid #e0e0e0;margin:.75em 0}
+ul,ol{margin:.3em 0 .65em 1.5em}
+li{margin-bottom:.3em}
+img{max-width:280px;border:1px solid #e0e0e0}
+</style></head><body>${html}</body></html>`;
+                            const blob = new Blob([doc], { type: "text/html" });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url; a.download = "cd-respuesta.html";
+                            a.click(); URL.revokeObjectURL(url);
+                          } catch {}
+                        }}
+                          title="Descargar como HTML"
+                          style={{
+                            background: "none", border: "none", color: TEXT_MUTED,
+                            cursor: "pointer", fontSize: 10, fontFamily: SERIF,
+                            padding: "2px 6px", transition: "color .15s",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.color = ACCENT; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = TEXT_MUTED; }}>
+                          ⬇ html
+                        </button>
+                        <button onClick={() => {
+                          try {
+                            const html = m.html || md(m.text);
+                            const doc = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>CD — ${m.text.slice(0, 60)}</title><style>
+body{font-family:Georgia,'Times New Roman',serif;max-width:700px;margin:40px auto;padding:0 20px;color:#1a1a1a;font-size:15px;line-height:1.8}
+strong{color:#ce2b37}em{color:#555}
+pre{background:#fafafa;border:1px solid #e0e0e0;border-left:3px solid #ce2b37;padding:12px 16px;overflow-x:auto}
+code{background:#f0f0f0;padding:1px 5px;font-size:13px}
+blockquote{border-left:3px solid #ce2b37;margin:.45em 0;padding:.25em 0 .25em 1em;color:#666;font-style:italic}
+table{border-collapse:collapse;width:100%;margin:.6em 0;font-size:13px}
+th{background:#ce2b37;color:#fff;padding:6px 10px;text-align:left}
+td{padding:5px 10px;border:1px solid #e0e0e0}
+.cifra{background:#f6f6f6;border-left:4px solid #ce2b37;padding:14px 16px;margin:.6em 0}
+hr{border:none;border-top:1px solid #e0e0e0;margin:.75em 0}
+ul,ol{margin:.3em 0 .65em 1.5em}
+li{margin-bottom:.3em}
+img{max-width:280px;border:1px solid #e0e0e0}
+@media print{body{margin:0;padding:0}}
+</style></head><body>${html}</body></html>`;
+                            const w = window.open("", "_blank");
+                            if (w) { w.document.write(doc); w.document.close(); setTimeout(() => w.print(), 500); }
+                          } catch {}
+                        }}
+                          title="Imprimir / Guardar como PDF"
+                          style={{
+                            background: "none", border: "none", color: TEXT_MUTED,
+                            cursor: "pointer", fontSize: 10, fontFamily: SERIF,
+                            padding: "2px 6px", transition: "color .15s",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.color = ACCENT; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = TEXT_MUTED; }}>
+                          🖨 pdf
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))}
