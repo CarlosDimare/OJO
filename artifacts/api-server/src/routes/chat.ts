@@ -91,7 +91,7 @@ router.post("/chat", async (req: Request, res: Response) => {
   /* ── Save / resolve conversation ── */
   let convId = conversation_id ? Number(conversation_id) : null;
   if (!convId) {
-    const conv = store.createConversation(message.trim().slice(0, 60), session_id || null);
+    const conv = store.createConversation(message.trim().slice(0, 60), session_id || null, charla_mode === true);
     convId = conv.id;
   } else {
     store.updateConversation(convId, { updatedAt: new Date() });

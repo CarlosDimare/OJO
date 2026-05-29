@@ -2,6 +2,7 @@ interface Conversation {
   id: number;
   title: string;
   sessionId: string | null;
+  charlaMode: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,11 +21,12 @@ const conversations: Conversation[] = [];
 const messages: Message[] = [];
 
 export const store = {
-  createConversation(title: string, sessionId: string | null): Conversation {
+  createConversation(title: string, sessionId: string | null, charlaMode: boolean): Conversation {
     const conv: Conversation = {
       id: nextConvId++,
       title,
       sessionId,
+      charlaMode,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -32,7 +34,7 @@ export const store = {
     return conv;
   },
 
-  updateConversation(id: number, updates: Partial<Pick<Conversation, "title" | "sessionId" | "updatedAt">>): void {
+  updateConversation(id: number, updates: Partial<Pick<Conversation, "title" | "sessionId" | "charlaMode" | "updatedAt">>): void {
     const conv = conversations.find((c) => c.id === id);
     if (conv) Object.assign(conv, updates);
   },

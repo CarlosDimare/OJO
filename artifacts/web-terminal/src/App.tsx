@@ -290,6 +290,7 @@ export default function App() {
   const msgsEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const chatMsgsRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   /* history */
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -297,6 +298,15 @@ export default function App() {
   const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => { msgsEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
@@ -363,6 +373,7 @@ export default function App() {
       })));
       setConversationId(id);
       setSessionId(data.sessionId);
+      if (typeof data.charlaMode === "boolean") setCharlaMode(data.charlaMode);
       setHistoryOpen(false);
     } catch {}
   }, []);
@@ -397,24 +408,23 @@ export default function App() {
         gap: 12,
       }}>
         {/* Brand */}
-        <div style={{
+        <div ref={menuRef} style={{
           display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
           fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: ACCENT,
-          letterSpacing: "-.02em", userSelect: "none",
+          letterSpacing: "-.02em", userSelect: "none", position: "relative",
         }}
-          onClick={() => setMenuOpen((p) => !p)}
-          onMouseLeave={() => setMenuOpen(false)}>
+          onClick={() => setMenuOpen((p) => !p)}>
           <span style={{
             background: ACCENT, color: "#fff", padding: "2px 6px",
             fontSize: 14, letterSpacing: ".05em",
-          }}>CD</span>
+          }}>OJO</span>
 
           {menuOpen && (
             <div style={{
-              position: "absolute", top: 48, left: 16, zIndex: 999,
+              position: "absolute", top: "100%", left: 0, zIndex: 999,
               background: BG, border: "1px solid " + BORDER,
               boxShadow: "0 4px 12px rgba(0,0,0,.08)",
-              minWidth: 180, fontFamily: SERIF,
+              minWidth: 180, fontFamily: SERIF, whiteSpace: "nowrap",
             }}>
               {[
                 { id: "new" as any, label: "Nuova conversazione" },
@@ -524,7 +534,7 @@ export default function App() {
                   letterSpacing: ".08em", color: TEXT_MUTED, fontFamily: SERIF,
                   textAlign: m.role === "user" ? "right" : "left",
                 }}>
-                  {m.role === "user" ? "Tu" : "CD"}
+                  {m.role === "user" ? "Tu" : "OJO"}
                 </div>
                 <div style={{
                   background: m.role === "user" ? BG_CARD : BG,
@@ -670,7 +680,7 @@ export default function App() {
                       letterSpacing: ".08em", color: TEXT_MUTED, fontFamily: SERIF,
                       textAlign: m.role === "user" ? "right" : "left",
                     }}>
-                      {m.role === "user" ? "Tu" : "CD"}
+                      {m.role === "user" ? "Tu" : "OJO"}
                     </div>
                     <div style={{
                       background: m.role === "user" ? BG_CARD : BG,
@@ -740,7 +750,7 @@ img{max-width:280px;border:1px solid #e0e0e0}
                         <button onClick={() => {
                           try {
                             const html = m.html || md(m.text);
-                            const doc = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>CD — ${m.text.slice(0, 60)}</title><style>
+                            const doc = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>OJO — ${m.text.slice(0, 60)}</title><style>
 body{font-family:Georgia,'Times New Roman',serif;max-width:700px;margin:40px auto;padding:0 20px;color:#1a1a1a;font-size:15px;line-height:1.8}
 strong{color:#ce2b37}em{color:#555}
 pre{background:#fafafa;border:1px solid #e0e0e0;border-left:3px solid #ce2b37;padding:12px 16px;overflow-x:auto}
@@ -758,7 +768,7 @@ img{max-width:280px;border:1px solid #e0e0e0}
                             const blob = new Blob([doc], { type: "text/html" });
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement("a");
-                            a.href = url; a.download = "cd-respuesta.html";
+                            a.href = url; a.download = "ojo-respuesta.html";
                             a.click(); URL.revokeObjectURL(url);
                           } catch {}
                         }}
@@ -775,7 +785,7 @@ img{max-width:280px;border:1px solid #e0e0e0}
                         <button onClick={() => {
                           try {
                             const html = m.html || md(m.text);
-                            const doc = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>CD — ${m.text.slice(0, 60)}</title><style>
+                            const doc = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>OJO — ${m.text.slice(0, 60)}</title><style>
 body{font-family:Georgia,'Times New Roman',serif;max-width:700px;margin:40px auto;padding:0 20px;color:#1a1a1a;font-size:15px;line-height:1.8}
 strong{color:#ce2b37}em{color:#555}
 pre{background:#fafafa;border:1px solid #e0e0e0;border-left:3px solid #ce2b37;padding:12px 16px;overflow-x:auto}
