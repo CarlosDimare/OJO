@@ -2,7 +2,14 @@ import { useEffect, useRef, useCallback, useState } from "react";
 
 const MONO = '"Cascadia Code","Fira Code",Menlo,Consolas,monospace';
 const SANS = '-apple-system,"Segoe UI","Helvetica Neue",Arial,sans-serif';
-const ACCENT = "#ff7700";
+const SERIF = 'Georgia,"Times New Roman",serif';
+const ACCENT = "#ce2b37";
+const ACCENT_BLUE = "#0a5278";
+const BG = "#fff";
+const BG_CARD = "#f6f6f6";
+const TEXT = "#1a1a1a";
+const TEXT_MUTED = "#888";
+const BORDER = "#e0e0e0";
 
 function esc(s: string): string {
   return s
@@ -224,47 +231,48 @@ interface ChatMessage { role: "user" | "bot"; text: string; html?: string; }
 
 const STYLES = `
   @keyframes pulse { 0%,100%{opacity:.2} 50%{opacity:1} }
-  *::-webkit-scrollbar { width: 4px; }
-  *::-webkit-scrollbar-track { background: #0a0a0a; }
-  *::-webkit-scrollbar-thumb { background: ${ACCENT}; }
-  textarea::placeholder { color: #555; }
+  *::-webkit-scrollbar { width: 6px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+  *::-webkit-scrollbar-thumb:hover { background: #aaa; }
+  textarea::placeholder { color: #bbb; font-family: ${SERIF}; font-style: italic; }
 
-  .md-p   { margin: 0 0 .65em; line-height: 1.8; }
+  .md-p   { margin: 0 0 .7em; line-height: 1.8; color: #333; font-family: ${SERIF}; font-size: 14px; }
   .md-p:last-child { margin-bottom: 0; }
-  .md-h1, .md-h2, .md-h3 { text-transform: uppercase; background: #fff; color: #cc0000; padding: 6px 10px; margin: .8em 0 .5em; letter-spacing: .04em; font-family: ${SANS}; }
-  .md-h1 { font-size: 1.3em; font-weight: 800; }
-  .md-h2 { font-size: 1.1em; font-weight: 700; }
-  .md-h3 { font-size: .96em; font-weight: 700; }
+  .md-h1, .md-h2, .md-h3 { font-family: ${SERIF}; color: ${ACCENT}; font-weight: 700; margin: 1em 0 .4em; line-height: 1.3; }
+  .md-h1 { font-size: 1.4em; border-bottom: 2px solid ${ACCENT}; padding-bottom: 4px; }
+  .md-h2 { font-size: 1.2em; }
+  .md-h3 { font-size: 1.05em; }
   .md-ul, .md-ol { margin: .3em 0 .65em 1.5em; padding: 0; }
-  .md-li  { margin-bottom: .3em; line-height: 1.75; }
-  .md-pre { background: #0a0a0a; border-left: 3px solid #cc0000; padding: 11px 14px; margin: .6em 0; overflow-x: auto; }
-  .md-code{ display: block; color: #e8e8e8; font-size: 12.5px; line-height: 1.6; white-space: pre; }
-  .md-ic  { background: #1c1c1c; border: 1px solid #2a2a2a; padding: 1px 5px; font-size: 12px; color: #e0e0e0; }
-  .md-a   { color: #4a9eff; text-decoration: underline; text-underline-offset: 2px; }
-  .md-a:hover { color: #79baff; }
-  .md-bq  { border-left: 3px solid #cc0000; margin: .45em 0; padding: .25em 0 .25em .8em; color: #999; font-style: italic; }
-  .md-hr  { border: none; border-top: 1px solid #222; margin: .75em 0; }
+  .md-li  { margin-bottom: .3em; line-height: 1.75; color: #444; font-family: ${SERIF}; }
+  .md-pre { background: #fafafa; border: 1px solid ${BORDER}; border-left: 3px solid ${ACCENT}; padding: 12px 16px; margin: .6em 0; overflow-x: auto; }
+  .md-code{ display: block; color: #333; font-size: 13px; line-height: 1.5; white-space: pre; font-family: ${MONO}; }
+  .md-ic  { background: #f0f0f0; border: 1px solid ${BORDER}; padding: 1px 5px; font-size: 12.5px; color: #333; font-family: ${MONO}; }
+  .md-a   { color: ${ACCENT_BLUE}; text-decoration: underline; text-underline-offset: 2px; }
+  .md-a:hover { color: #083d5e; }
+  .md-bq  { border-left: 3px solid ${ACCENT}; margin: .45em 0; padding: .25em 0 .25em 1em; color: #666; font-style: italic; font-family: ${SERIF}; }
+  .md-hr  { border: none; border-top: 1px solid ${BORDER}; margin: .75em 0; }
   .md-table { border-collapse: collapse; width: 100%; margin: .6em 0; font-size: 13px; }
-  .md-th  { background: #cc0000; color: #fff; font-weight: 700; padding: 6px 10px; text-align: left; border: 1px solid #222; }
-  .md-td  { padding: 5px 10px; border: 1px solid #1e1e1e; color: #d0d0d0; }
-  .md-table tr:nth-child(even) td { background: #111; }
-  .md-cites { margin-top: .5em; padding-top: .4em; border-top: 1px solid #1e1e1e; display: flex; flex-wrap: wrap; gap: .3em .6em; }
-  .md-cite  { color: #666; font-size: .76em; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-  .md-cite:hover { color: #999; }
-  .md-cite-text { color: #555; font-size: .76em; }
-  .md-data-box { background: #0d0d0d; border: 2px solid #cc0000; padding: 14px 16px; margin: .6em 0; }
-  .md-data-box strong { color: #fff; }
+  .md-th  { background: ${ACCENT}; color: #fff; font-weight: 700; padding: 6px 10px; text-align: left; border: 1px solid ${ACCENT}; }
+  .md-td  { padding: 5px 10px; border: 1px solid ${BORDER}; color: #444; }
+  .md-table tr:nth-child(even) td { background: ${BG_CARD}; }
+  .md-cites { margin-top: .5em; padding-top: .4em; border-top: 1px solid ${BORDER}; display: flex; flex-wrap: wrap; gap: .3em .6em; }
+  .md-cite  { color: ${TEXT_MUTED}; font-size: .76em; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  .md-cite:hover { color: #555; }
+  .md-cite-text { color: #aaa; font-size: .76em; }
+  .md-data-box { background: ${BG_CARD}; border-left: 4px solid ${ACCENT}; padding: 14px 16px; margin: .6em 0; font-family: ${SERIF}; }
+  .md-data-box strong { color: ${ACCENT}; }
   .md-data-box br + strong { display: inline-block; margin-top: .3em; }
-  .md-num { color: #cc0000; font-weight: 700; }
+  .md-num { color: ${ACCENT}; font-weight: 700; font-family: ${SERIF}; }
   .md-media { margin: .6em 0; }
-  .md-thumb { max-width: 280px; max-height: 180px; height: auto; border: 2px solid #cc0000; display: block; margin: .4em 0; border-radius: 4px; }
+  .md-thumb { max-width: 280px; max-height: 180px; height: auto; border: 1px solid ${BORDER}; display: block; margin: .4em 0; }
   .md-img-wrap { display: block; margin: .4em 0; }
   .md-video { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; }
-  .md-video iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 1px solid #1a1a1a; }
+  .md-video iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; }
   .md-link-modal { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
   .md-link-modal:hover { opacity: .8; }
-  strong { color: #fff; font-weight: 700; }
-  em     { color: #bbb; }
+  strong { color: ${ACCENT}; font-weight: 700; }
+  em     { color: #555; font-style: italic; }
 `;
 
 export default function App() {
@@ -378,38 +386,43 @@ export default function App() {
   }, []);
 
   return (
-    <div style={{ width: "100vw", height: "100dvh", background: "#0a0a0a",
-      display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: MONO }}>
+    <div style={{ width: "100vw", height: "100dvh", background: BG,
+      display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-      <nav style={{ flexShrink: 0, background: "#0a0a0a", borderBottom: "3px solid " + ACCENT,
-        display: "flex", alignItems: "stretch", height: 48, position: "relative" }}>
-
-        <div style={{ width: 6, background: ACCENT, flexShrink: 0 }} />
-
-        <div style={{ paddingLeft: 14, paddingRight: 18, display: "flex",
-          alignItems: "center", borderRight: "2px solid #1a1a1a", cursor: "pointer",
-          position: "relative" }}
+      {/* ── Header ── */}
+      <nav style={{
+        flexShrink: 0, background: BG,
+        borderBottom: "1px solid " + BORDER,
+        display: "flex", alignItems: "center", height: 52, padding: "0 16px",
+        gap: 12,
+      }}>
+        {/* Brand */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+          fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: ACCENT,
+          letterSpacing: "-.02em", userSelect: "none",
+        }}
           onClick={() => setMenuOpen((p) => !p)}
           onMouseLeave={() => setMenuOpen(false)}>
-          <div style={{ width: 24, height: 24, background: ACCENT,
-            display: "grid", placeItems: "center", transform: "rotate(45deg)", flexShrink: 0 }}>
-            <img src="/ESTRELLA.svg" alt="✦"
-              style={{ width: 16, height: 16, transform: "rotate(-45deg)", display: "block" }} />
-          </div>
+          <span style={{
+            background: ACCENT, color: "#fff", padding: "2px 6px",
+            fontSize: 14, letterSpacing: ".05em",
+          }}>CD</span>
 
           {menuOpen && (
             <div style={{
-              position: "absolute", top: 44, left: 0, zIndex: 999,
-              background: "#111", border: "2px solid " + ACCENT,
-              minWidth: 180, fontFamily: MONO,
+              position: "absolute", top: 48, left: 16, zIndex: 999,
+              background: BG, border: "1px solid " + BORDER,
+              boxShadow: "0 4px 12px rgba(0,0,0,.08)",
+              minWidth: 180, fontFamily: SERIF,
             }}>
               {[
-                { id: "new" as any, label: "◈ NUEVA CONVERSACIÓN" },
+                { id: "new" as any, label: "Nuova conversazione" },
                 { id: null, label: "─" },
-                { id: "history" as any, label: "☰ HISTORIAL" },
+                { id: "history" as any, label: "☰ Cronologia" },
               ].map((item: any, idx) => {
                 if (item.label === "─") {
-                  return <div key={idx} style={{ height: 1, background: "#222", margin: "4px 0" }} />;
+                  return <div key={idx} style={{ height: 1, background: BORDER, margin: "4px 0" }} />;
                 }
                 return (
                   <button key={item.id} onClick={() => {
@@ -419,14 +432,11 @@ export default function App() {
                   }}
                     style={{
                       display: "block", width: "100%", border: "none",
-                      background: "transparent",
-                      color: "#555",
-                      cursor: "pointer", padding: "10px 18px", fontSize: 11,
-                      fontWeight: 700, letterSpacing: ".12em",
-                      textTransform: "uppercase", textAlign: "left",
-                      fontFamily: MONO, transition: "all .1s",
+                      background: "transparent", color: TEXT,
+                      cursor: "pointer", padding: "10px 18px", fontSize: 13,
+                      textAlign: "left", fontFamily: SERIF, transition: "all .1s",
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "#1a1a1a"; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = BG_CARD; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
                     {item.label}
                   </button>
@@ -436,211 +446,354 @@ export default function App() {
           )}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", paddingLeft: 16 }}>
-          <span style={{ color: charlaMode ? "#ff7700" : "#888", fontSize: 11, fontWeight: 700,
-            letterSpacing: ".12em", textTransform: "uppercase", fontFamily: MONO }}>
-            ◈ {charlaMode ? "CHARLA" : "PERIODISTA"}
-          </span>
-        </div>
+        <div style={{ width: 1, height: 24, background: BORDER }} />
 
-        <button
-          onClick={() => {
-            setCharlaMode((m) => !m);
-            setSessionId(null);
-            setConversationId(null);
-          }}
-          title={charlaMode ? "Activar modo periodista" : "Volver a modo charla"}
-          style={{
-            marginLeft: 16,
-            background: charlaMode ? "transparent" : "#ff7700",
-            color: charlaMode ? "#555" : "#000",
-            border: "1px solid " + (charlaMode ? "#333" : "#ff7700"),
-            padding: "3px 10px",
-            fontSize: 10, fontWeight: 700, letterSpacing: ".1em",
-            textTransform: "uppercase", cursor: "pointer",
-            fontFamily: MONO, transition: "all .15s",
-            whiteSpace: "nowrap",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#ff7700"; e.currentTarget.style.color = charlaMode ? "#ff7700" : "#000"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = charlaMode ? "#333" : "#ff7700"; e.currentTarget.style.color = charlaMode ? "#555" : "#000"; }}
-        >
-          {charlaMode ? "○ PERIODISTA" : "✦ PERIODISTA"}
-        </button>
+        {/* Mode label */}
+        <span style={{
+          color: TEXT_MUTED, fontSize: 12, fontFamily: SERIF, fontStyle: "italic",
+        }}>
+          {charlaMode ? "chat" : "inchiesta"}
+        </span>
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", paddingRight: 16 }}>
-          <span style={{ color: ACCENT, fontSize: 11, fontWeight: 700,
-            letterSpacing: ".06em", fontFamily: MONO }}>
-            {clock}
-          </span>
-        </div>
-      </nav>
-
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
-
-        <div ref={chatMsgsRef} style={{ flex: 1, overflowY: "auto", padding: "20px 0 8px",
-          display: "flex", flexDirection: "column", fontFamily: SANS }}>
-          {messages.length === 0 && (
-            <div style={{ margin: "auto", textAlign: "center" }}>
-              <div style={{ position: "relative", width: 64, height: 64, margin: "0 auto 14px" }}>
-                <div style={{ position: "absolute", inset: 0, border: "3px solid " + ACCENT }} />
-                <div style={{ position: "absolute", top: 7, left: 7, right: 7, bottom: 7,
-                  background: ACCENT, display: "grid", placeItems: "center" }}>
-                  <span style={{ color: "#fff", fontSize: 22, fontWeight: 900 }}>✦</span>
-                </div>
-              </div>
-              <p style={{ color: "#553300", fontSize: 10, fontWeight: 700,
-                letterSpacing: ".18em", textTransform: "uppercase", fontFamily: MONO }}>
-                LISTO PARA ANALIZAR
-              </p>
-            </div>
-          )}
-
-          {messages.map((m, i) => (
-            <div key={i} style={{
-              display: "flex",
-              flexDirection: m.role === "user" ? "row-reverse" : "row",
-              alignItems: "flex-start", gap: 10, marginBottom: 16,
-              padding: "0 16px",
-              maxWidth: 900, width: "100%", boxSizing: "border-box",
-              alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-            }}>
-              <div style={{
-                width: 26, height: 26, flexShrink: 0,
-                background: m.role === "user" ? ACCENT : "#111",
-                border: m.role === "bot" ? "2px solid " + ACCENT : "none",
-                display: "grid", placeItems: "center",
-                color: m.role === "user" ? "#000" : ACCENT,
-                fontWeight: 700, fontSize: 10, letterSpacing: ".05em", fontFamily: MONO,
-              }}>
-                {m.role === "user" ? "U" : "A"}
-              </div>
-
-              <div style={{
-                background: m.role === "user" ? ACCENT : "#111",
-                borderLeft: m.role === "bot" ? "3px solid " + ACCENT : undefined,
-                border: m.role === "bot" ? "1px solid #1a1a1a" : "none",
-                padding: "10px 14px",
-                maxWidth: "calc(100% - 48px)",
-                color: m.role === "user" ? "#000" : "#d0d0d0",
-                fontSize: 13.5, lineHeight: 1.75,
-                wordBreak: "break-word", fontFamily: SANS,
-              }}>
-                {m.role === "user" ? (
-                  <span style={{ whiteSpace: "pre-wrap", fontFamily: MONO }}>{m.text}</span>
-                ) : m.html ? (
-                  <span dangerouslySetInnerHTML={{ __html: m.html }} />
-                ) : thinkingStatus ? (
-                  <span style={{ color: "#666", fontSize: 11, fontWeight: 700,
-                    letterSpacing: ".08em", fontFamily: MONO }}>
-                    {thinkingStatus}
-                  </span>
-                ) : (
-                  <span style={{ display: "inline-flex", gap: 5, alignItems: "center" }}>
-                    {[0, .25, .5].map((d, j) => (
-                      <span key={j} style={{ width: 5, height: 5, background: ACCENT,
-                        display: "inline-block", animation: `pulse 1.2s ${d}s infinite` }} />
-                    ))}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-          <div ref={msgsEndRef} />
-        </div>
-
-        <div style={{ borderTop: "2px solid " + ACCENT, padding: "10px 16px 14px",
-          background: "#0a0a0a", display: "flex", gap: 8, flexShrink: 0, alignItems: "flex-end" }}>
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              e.target.style.height = "40px";
-              e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px";
-            }}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(); } }}
-            placeholder="escribe un mensaje... (enter para enviar)"
-            rows={1} disabled={busy}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+          {/* Charla button */}
+          <button onClick={() => { if (!charlaMode) { setCharlaMode(true); setSessionId(null); setConversationId(null); } }}
             style={{
-              flex: 1, background: "#0d0d0d", border: "1px solid #1e1e1e",
-              color: "#e8e8e8", fontSize: 13, padding: "9px 12px",
-              resize: "none", height: 40, maxHeight: 140, fontFamily: MONO,
-              lineHeight: 1.5, outline: "none", overflow: "auto",
-              transition: "border-color .15s",
+              padding: "5px 14px", fontSize: 11, fontWeight: 700,
+              letterSpacing: ".06em", textTransform: "uppercase",
+              fontFamily: SERIF, cursor: "pointer", whiteSpace: "nowrap",
+              background: charlaMode ? ACCENT : "transparent",
+              color: charlaMode ? "#fff" : TEXT_MUTED,
+              border: "1px solid " + (charlaMode ? ACCENT : BORDER),
+              transition: "all .15s",
             }}
-            onFocus={(e) => (e.target.style.borderColor = ACCENT)}
-            onBlur={(e)  => (e.target.style.borderColor = "#1e1e1e")}
-          />
-          <button onClick={() => void sendMessage()}
-            disabled={busy || !input.trim()}
+            onMouseEnter={(e) => { if (!charlaMode) { e.currentTarget.style.borderColor = ACCENT; e.currentTarget.style.color = ACCENT; } }}
+            onMouseLeave={(e) => { if (!charlaMode) { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = TEXT_MUTED; } }}>
+            CHARLA
+          </button>
+          {/* Periodista button */}
+          <button onClick={() => { if (charlaMode) { setCharlaMode(false); setSessionId(null); setConversationId(null); } }}
             style={{
-              background: busy || !input.trim() ? "#111" : ACCENT,
-              color: busy || !input.trim() ? "#333" : "#000",
-              border: "none", cursor: busy || !input.trim() ? "not-allowed" : "pointer",
-              width: 40, height: 40, display: "grid", placeItems: "center",
-              flexShrink: 0, transition: "background .15s",
+              padding: "5px 14px", fontSize: 11, fontWeight: 700,
+              letterSpacing: ".06em", textTransform: "uppercase",
+              fontFamily: SERIF, cursor: "pointer", whiteSpace: "nowrap",
+              background: charlaMode ? "transparent" : ACCENT,
+              color: charlaMode ? TEXT_MUTED : "#fff",
+              border: "1px solid " + (charlaMode ? BORDER : ACCENT),
+              transition: "all .15s",
             }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2.5" strokeLinecap="square">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
+            onMouseEnter={(e) => { if (charlaMode) { e.currentTarget.style.borderColor = ACCENT; e.currentTarget.style.color = ACCENT; } }}
+            onMouseLeave={(e) => { if (charlaMode) { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = TEXT_MUTED; } }}>
+            PERIODISTA
           </button>
         </div>
-      </div>
 
+        {/* Clock */}
+        <span style={{ color: TEXT_MUTED, fontSize: 11, fontFamily: MONO, marginLeft: 8 }}>
+          {clock}
+        </span>
+      </nav>
+
+      {/* ── Main content ── */}
+      {charlaMode ? (
+        /* ── CHARLA MODE: normal chat ── */
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+          <div ref={chatMsgsRef} style={{
+            flex: 1, overflowY: "auto", padding: "20px 0 8px",
+            display: "flex", flexDirection: "column", alignItems: "center",
+          }}>
+            {messages.length === 0 && (
+              <div style={{ margin: "auto", textAlign: "center", padding: "0 20px" }}>
+                <p style={{ color: TEXT_MUTED, fontSize: 24, fontWeight: 400,
+                  fontFamily: SERIF, margin: 0, lineHeight: 1.4 }}>
+                  <span style={{ fontStyle: "italic" }}>¿De qué<br />hablamos?</span>
+                </p>
+              </div>
+            )}
+
+            {messages.map((m, i) => (
+              <div key={i} style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4, marginBottom: 14,
+                padding: "0 16px",
+                maxWidth: 700, width: "100%", boxSizing: "border-box",
+              }}>
+                <div style={{
+                  fontSize: 10, fontWeight: 700, textTransform: "uppercase",
+                  letterSpacing: ".08em", color: TEXT_MUTED, fontFamily: SERIF,
+                  textAlign: m.role === "user" ? "right" : "left",
+                }}>
+                  {m.role === "user" ? "Tu" : "CD"}
+                </div>
+                <div style={{
+                  background: m.role === "user" ? BG_CARD : BG,
+                  border: "1px solid " + BORDER,
+                  borderLeft: m.role === "bot" ? "3px solid " + ACCENT : "none",
+                  padding: "12px 16px",
+                  fontSize: 14, lineHeight: 1.75,
+                  color: TEXT,
+                  fontFamily: SERIF,
+                  wordBreak: "break-word",
+                }}>
+                  {m.role === "user" ? (
+                    <span style={{ fontFamily: MONO, fontSize: 13, color: TEXT }}>{m.text}</span>
+                  ) : m.html ? (
+                    <span dangerouslySetInnerHTML={{ __html: m.html }} />
+                  ) : thinkingStatus ? (
+                    <span style={{ color: TEXT_MUTED, fontSize: 12, fontStyle: "italic", fontFamily: SERIF }}>
+                      {thinkingStatus}
+                    </span>
+                  ) : (
+                    <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                      {[0, .25, .5].map((d, j) => (
+                        <span key={j} style={{ width: 4, height: 4, background: ACCENT, borderRadius: "50%",
+                          display: "inline-block", animation: `pulse 1.2s ${d}s infinite` }} />
+                      ))}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div ref={msgsEndRef} />
+          </div>
+
+          <div style={{
+            borderTop: "1px solid " + BORDER, padding: "12px 16px 16px",
+            background: BG, display: "flex", gap: 8, flexShrink: 0, alignItems: "flex-end",
+          }}>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                e.target.style.height = "40px";
+                e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+              }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(); } }}
+              placeholder="Scrivi qualcosa… (Invio per inviare)"
+              rows={1} disabled={busy}
+              style={{
+                flex: 1, background: BG_CARD, border: "1px solid " + BORDER,
+                color: TEXT, fontSize: 14, padding: "10px 14px",
+                resize: "none", height: 40, maxHeight: 120,
+                fontFamily: SERIF, lineHeight: 1.5, outline: "none", overflow: "auto",
+                transition: "border-color .15s",
+              }}
+              onFocus={(e) => (e.target.style.borderColor = ACCENT)}
+              onBlur={(e) => (e.target.style.borderColor = BORDER)}
+            />
+            <button onClick={() => void sendMessage()}
+              disabled={busy || !input.trim()}
+              style={{
+                background: busy || !input.trim() ? BG_CARD : ACCENT,
+                color: busy || !input.trim() ? TEXT_MUTED : "#fff",
+                border: "none", cursor: busy || !input.trim() ? "not-allowed" : "pointer",
+                width: 40, height: 40, display: "grid", placeItems: "center",
+                flexShrink: 0, transition: "background .15s", fontSize: 16,
+              }}
+            >
+              ›
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* ── PERIODISTA MODE: centered input ── */
+        <div style={{
+          flex: 1, display: "flex", flexDirection: "column", minHeight: 0,
+        }}>
+          {messages.length === 0 ? (
+            /* Centered prompt */
+            <div style={{
+              flex: 1, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              padding: "0 20px",
+            }}>
+              <p style={{
+                fontFamily: SERIF, fontSize: 28, color: TEXT,
+                margin: "0 0 24px", textAlign: "center", lineHeight: 1.3, fontWeight: 400,
+                letterSpacing: "-.01em",
+              }}>
+                <span style={{ fontStyle: "italic" }}>¿Qué tema<br />investigo?</span>
+              </p>
+              <div style={{
+                display: "flex", gap: 8, width: "100%", maxWidth: 520,
+              }}>
+                <input
+                  ref={inputRef as any}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void sendMessage(); } }}
+                  placeholder="escribe el tema a investigar…"
+                  disabled={busy}
+                  style={{
+                    flex: 1, background: BG_CARD, border: "1px solid " + BORDER,
+                    color: TEXT, fontSize: 15, padding: "12px 16px",
+                    outline: "none", fontFamily: SERIF,
+                    transition: "border-color .15s",
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = ACCENT)}
+                  onBlur={(e) => (e.target.style.borderColor = BORDER)}
+                />
+                <button onClick={() => void sendMessage()}
+                  disabled={busy || !input.trim()}
+                  style={{
+                    background: busy || !input.trim() ? BG_CARD : ACCENT,
+                    color: busy || !input.trim() ? TEXT_MUTED : "#fff",
+                    border: "none", cursor: busy || !input.trim() ? "not-allowed" : "pointer",
+                    width: 46, height: 46, display: "grid", placeItems: "center",
+                    flexShrink: 0, fontSize: 20, fontWeight: 700,
+                    fontFamily: SERIF, transition: "background .15s",
+                  }}
+                >
+                  →
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Conversation view (same as charla) */
+            <>
+              <div ref={chatMsgsRef} style={{
+                flex: 1, overflowY: "auto", padding: "20px 0 8px",
+                display: "flex", flexDirection: "column", alignItems: "center",
+              }}>
+                {messages.map((m, i) => (
+                  <div key={i} style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4, marginBottom: 14,
+                    padding: "0 16px",
+                    maxWidth: 700, width: "100%", boxSizing: "border-box",
+                  }}>
+                    <div style={{
+                      fontSize: 10, fontWeight: 700, textTransform: "uppercase",
+                      letterSpacing: ".08em", color: TEXT_MUTED, fontFamily: SERIF,
+                      textAlign: m.role === "user" ? "right" : "left",
+                    }}>
+                      {m.role === "user" ? "Tu" : "CD"}
+                    </div>
+                    <div style={{
+                      background: m.role === "user" ? BG_CARD : BG,
+                      border: "1px solid " + BORDER,
+                      borderLeft: m.role === "bot" ? "3px solid " + ACCENT : "none",
+                      padding: "12px 16px",
+                      fontSize: 14, lineHeight: 1.75,
+                      color: TEXT,
+                      fontFamily: SERIF,
+                      wordBreak: "break-word",
+                    }}>
+                      {m.role === "user" ? (
+                        <span style={{ fontFamily: MONO, fontSize: 13, color: TEXT }}>{m.text}</span>
+                      ) : m.html ? (
+                        <span dangerouslySetInnerHTML={{ __html: m.html }} />
+                      ) : thinkingStatus ? (
+                        <span style={{ color: TEXT_MUTED, fontSize: 12, fontStyle: "italic", fontFamily: SERIF }}>
+                          {thinkingStatus}
+                        </span>
+                      ) : (
+                        <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                          {[0, .25, .5].map((d, j) => (
+                            <span key={j} style={{ width: 4, height: 4, background: ACCENT, borderRadius: "50%",
+                              display: "inline-block", animation: `pulse 1.2s ${d}s infinite` }} />
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div ref={msgsEndRef} />
+              </div>
+
+              <div style={{
+                borderTop: "1px solid " + BORDER, padding: "12px 16px 16px",
+                background: BG, display: "flex", gap: 8, flexShrink: 0, alignItems: "flex-end",
+              }}>
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void sendMessage(); } }}
+                  placeholder="Seguí preguntando…"
+                  disabled={busy}
+                  style={{
+                    flex: 1, background: BG_CARD, border: "1px solid " + BORDER,
+                    color: TEXT, fontSize: 14, padding: "10px 14px",
+                    outline: "none", fontFamily: SERIF, height: 40,
+                    transition: "border-color .15s",
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = ACCENT)}
+                  onBlur={(e) => (e.target.style.borderColor = BORDER)}
+                />
+                <button onClick={() => void sendMessage()}
+                  disabled={busy || !input.trim()}
+                  style={{
+                    background: busy || !input.trim() ? BG_CARD : ACCENT,
+                    color: busy || !input.trim() ? TEXT_MUTED : "#fff",
+                    border: "none", cursor: busy || !input.trim() ? "not-allowed" : "pointer",
+                    width: 40, height: 40, display: "grid", placeItems: "center",
+                    flexShrink: 0, fontSize: 16, fontWeight: 700,
+                    fontFamily: SERIF, transition: "background .15s",
+                  }}
+                >
+                  →
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── History Modal ── */}
       {historyOpen && (
         <div style={{
           position: "fixed", inset: 0, zIndex: 999,
-          background: "rgba(0,0,0,.85)", display: "flex",
+          background: "rgba(0,0,0,.4)", display: "flex",
           flexDirection: "column", alignItems: "center",
-          justifyContent: "center", padding: 20, fontFamily: MONO,
+          justifyContent: "center", padding: 20, fontFamily: SERIF,
         }} onClick={() => setHistoryOpen(false)}>
           <div style={{
-            background: "#111", border: "2px solid " + ACCENT,
-            maxWidth: 600, width: "100%", maxHeight: "80vh",
+            background: BG, border: "1px solid " + BORDER,
+            boxShadow: "0 8px 30px rgba(0,0,0,.1)",
+            maxWidth: 520, width: "100%", maxHeight: "80vh",
             display: "flex", flexDirection: "column",
           }} onClick={(e) => e.stopPropagation()}>
             <div style={{
               display: "flex", justifyContent: "space-between",
-              alignItems: "center", padding: "12px 16px",
-              borderBottom: "1px solid #1a1a1a", flexShrink: 0,
+              alignItems: "center", padding: "14px 18px",
+              borderBottom: "1px solid " + BORDER, flexShrink: 0,
             }}>
-              <span style={{ color: ACCENT, fontWeight: 700, fontSize: 11,
-                letterSpacing: ".12em", textTransform: "uppercase" }}>
-                ☰ HISTORIAL
+              <span style={{ fontWeight: 700, fontSize: 14, color: TEXT, fontFamily: SERIF }}>
+                Cronologia
               </span>
               <button onClick={() => setHistoryOpen(false)}
-                style={{ background: "none", border: "none", color: "#555",
-                  cursor: "pointer", fontSize: 18 }}>
+                style={{ background: "none", border: "none", color: TEXT_MUTED,
+                  cursor: "pointer", fontSize: 18, padding: 0, lineHeight: 1 }}>
                 ✕
               </button>
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+            <div style={{ flex: 1, overflowY: "auto" }}>
               {historyLoading && (
-                <div style={{ textAlign: "center", color: "#555", padding: 20, fontSize: 11,
-                  letterSpacing: ".1em", textTransform: "uppercase" }}>
-                  Cargando...
+                <div style={{ textAlign: "center", color: TEXT_MUTED, padding: 24, fontSize: 13, fontFamily: SERIF, fontStyle: "italic" }}>
+                  caricamento…
                 </div>
               )}
               {!historyLoading && conversations.length === 0 && (
-                <div style={{ textAlign: "center", color: "#333", padding: 20, fontSize: 11,
-                  letterSpacing: ".1em", textTransform: "uppercase" }}>
-                  Sin conversaciones guardadas
+                <div style={{ textAlign: "center", color: TEXT_MUTED, padding: 24, fontSize: 13, fontFamily: SERIF }}>
+                  Nessuna conversazione
                 </div>
               )}
               {!historyLoading && conversations.map((c: any) => (
                 <div key={c.id} style={{
                   display: "flex", alignItems: "center", gap: 8,
-                  padding: "8px 16px", borderBottom: "1px solid #1a1a1a",
+                  padding: "10px 18px", borderBottom: "1px solid " + BORDER,
                 }}>
                   <div style={{ flex: 1, overflow: "hidden" }}>
-                    <div style={{ color: "#d0d0d0", fontSize: 12, fontWeight: 700,
-                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <div style={{ fontSize: 13, color: TEXT,
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                      fontFamily: SERIF,
+                    }}>
                       {c.title}
                     </div>
-                    <div style={{ color: "#555", fontSize: 10, marginTop: 2 }}>
+                    <div style={{ color: TEXT_MUTED, fontSize: 11, marginTop: 2, fontFamily: SERIF }}>
                       {new Date(c.createdAt).toLocaleString("es-AR", {
                         day: "2-digit", month: "2-digit", year: "numeric",
                         hour: "2-digit", minute: "2-digit",
@@ -649,21 +802,19 @@ export default function App() {
                   </div>
                   <button onClick={() => loadConversation(c.id)}
                     style={{
-                      background: ACCENT, color: "#000", border: "none",
-                      padding: "5px 10px", cursor: "pointer", fontSize: 9,
-                      fontWeight: 700, letterSpacing: ".1em",
-                      textTransform: "uppercase", flexShrink: 0,
+                      background: ACCENT, color: "#fff", border: "none",
+                      padding: "5px 10px", cursor: "pointer", fontSize: 11,
+                      fontWeight: 600, fontFamily: SERIF, flexShrink: 0,
                     }}>
-                    CARGAR
+                    Carica
                   </button>
                   <button onClick={() => deleteConversation(c.id)}
                     style={{
-                      background: "transparent", color: "#555", border: "1px solid #333",
-                      padding: "5px 10px", cursor: "pointer", fontSize: 9,
-                      fontWeight: 700, letterSpacing: ".1em",
-                      textTransform: "uppercase", flexShrink: 0,
+                      background: "transparent", color: TEXT_MUTED, border: "1px solid " + BORDER,
+                      padding: "5px 10px", cursor: "pointer", fontSize: 11,
+                      fontFamily: SERIF, flexShrink: 0,
                     }}>
-                    BORRAR
+                    Elimina
                   </button>
                 </div>
               ))}
