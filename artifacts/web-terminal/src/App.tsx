@@ -699,6 +699,20 @@ export default function App() {
                         </span>
                       )}
                     </div>
+                    {m.role === "bot" && m.text && !thinkingStatus && (
+                      <button onClick={() => navigator.clipboard.writeText(m.text)}
+                        title="Copiar respuesta"
+                        style={{
+                          alignSelf: "flex-start", marginTop: 4, marginLeft: 2,
+                          background: "none", border: "none", color: TEXT_MUTED,
+                          cursor: "pointer", fontSize: 10, fontFamily: SERIF,
+                          padding: "2px 6px", transition: "color .15s",
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = ACCENT; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = TEXT_MUTED; }}>
+                        📋 copiar
+                      </button>
+                    )}
                   </div>
                 ))}
                 <div ref={msgsEndRef} />

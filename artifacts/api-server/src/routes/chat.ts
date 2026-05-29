@@ -98,7 +98,7 @@ router.post("/chat", async (req: Request, res: Response) => {
   }
   store.createMessage(convId, "user", message.trim());
 
-  const args = ["run", "--format", "json"];
+  const args = ["run", "--format", "json", "-m", "deepseek/deepseek-v4-flash"];
   if (session_id) args.push("--session", session_id);
   args.push(fullMessage);
 
