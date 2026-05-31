@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { spawn } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
@@ -7,12 +7,10 @@ import type { Request, Response } from "express";
 import { store } from "../lib/store";
 import { logger } from "../lib/logger";
 
-// Resolve opencode binary — works in local dev, pnpm workspaces, and production
+// Resolve opencode binary
 const __dir = dirname(fileURLToPath(import.meta.url));
 const CANDIDATES = [
-  // from src/routes/ (source) — ../../ = api-server/
   resolve(__dir, "../../node_modules/.bin/opencode"),
-  // from dist/ (built) — ../ = api-server/
   resolve(__dir, "../node_modules/.bin/opencode"),
   resolve(__dir, "../../../node_modules/.bin/opencode"),
   resolve(__dir, "../../../../node_modules/.bin/opencode"),
@@ -21,7 +19,82 @@ const CANDIDATES = [
 const OPENCODE = CANDIDATES.find(existsSync) || "opencode";
 logger.info({ opencode: OPENCODE }, "chat route initialized");
 
-const OPENCODE_TIMEOUT_MS = 120_000; // 2 minutes
+const OPENCODE_TIMEOUT_MS = 120_000;
+const SERVE_PORT = 4200;
+const SERVE_PASSWORD = "ojo-serve-local";
+
+/* ── opencode serve lifecycle ── */
+
+let serveProc: ChildProcess | null = null;
+let serveUrl: string | null = null;
+let serveReadyPromise: Promise<void> | null = null;
+let serveStarting = false;
+
+export async function initServe(): Promise<void> {
+  if (serveUrl) return;
+  if (serveReadyPromise) return serveReadyPromise;
+
+  serveStarting = true;
+  serveReadyPromise = new Promise<void>((resolve, reject) => {
+    logger.info({ port: SERVE_PORT }, "starting opencode serve");
+    try {
+      const proc = spawn(OPENCODE, ["serve", "--port", String(SERVE_PORT), "--print-logs"], {
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, OPENCODE_SERVER_PASSWORD: SERVE_PASSWORD },
+      });
+      serveProc = proc;
+
+      let stderrBuf = "";
+      proc.stderr!.setEncoding("utf8");
+      proc.stderr!.on("data", (d: string) => { stderrBuf += d; });
+
+      proc.stdout!.setEncoding("utf8");
+      proc.stdout!.on("data", (d: string) => {
+        if (!serveUrl && d.includes("listening on")) {
+          serveUrl = `http://127.0.0.1:${SERVE_PORT}`;
+          logger.info({ serveUrl }, "opencode serve ready");
+          resolve();
+        }
+      });
+
+      proc.on("error", (err) => {
+        logger.error({ err }, "opencode serve process error");
+        serveProc = null; serveStarting = false;
+        reject(err);
+      });
+
+      proc.on("exit", (code) => {
+        const wasReady = !!serveUrl;
+        logger.warn({ code, stderr: stderrBuf.slice(0, 300) }, "opencode serve exited");
+        serveProc = null; serveUrl = null; serveReadyPromise = null; serveStarting = false;
+        if (!wasReady) reject(new Error(`serve exited (${code}): ${stderrBuf.slice(0, 200)}`));
+        // Auto-restart after a short delay
+        else setTimeout(() => { void initServe(); }, 1500);
+      });
+
+      setTimeout(() => {
+        if (!serveUrl) { serveStarting = false; reject(new Error("serve startup timeout")); }
+      }, 20_000);
+    } catch (err) {
+      serveStarting = false;
+      logger.error({ err }, "failed to spawn opencode serve");
+      reject(err);
+    }
+  });
+
+  return serveReadyPromise;
+}
+
+export function stopServe(): void {
+  if (serveProc) {
+    logger.info("stopping opencode serve");
+    serveProc.kill();
+    serveProc = null; serveUrl = null; serveReadyPromise = null; serveStarting = false;
+  }
+}
+
+// Start serve in background at import time; first request will await it if needed
+void initServe();
 
 const router = Router();
 
@@ -98,7 +171,25 @@ router.post("/chat", async (req: Request, res: Response) => {
   }
   store.createMessage(convId, "user", message.trim());
 
-  const args = ["run", "--format", "json"];
+  /* ── Ensure opencode serve is ready ── */
+  let attachUrl: string;
+  try {
+    await initServe();
+    attachUrl = serveUrl!;
+  } catch (err) {
+    log.error({ err }, "opencode serve unavailable");
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.write(sse({ type: "error", message: "opencode serve unavailable: " + String(err) }));
+    res.end();
+    return;
+  }
+
+  const args = ["run", "--attach", attachUrl, "--password", SERVE_PASSWORD, "--format", "json"];
   if (session_id) args.push("--session", session_id);
   args.push(fullMessage);
 
