@@ -231,6 +231,26 @@ interface ChatMessage { role: "user" | "bot"; text: string; html?: string; }
 
 const STYLES = `
   @keyframes pulse { 0%,100%{opacity:.2} 50%{opacity:1} }
+  @keyframes a-brain { 0%,100%{transform:scale(1)} 50%{transform:scale(1.12)} }
+  @keyframes a-scan { 0%,100%{transform:translateX(-5px)} 50%{transform:translateX(5px)} }
+  @keyframes a-globe { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
+  @keyframes a-read { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+  @keyframes a-write { 0%,100%{transform:rotate(-6deg)} 50%{transform:rotate(6deg)} }
+  @keyframes a-spin { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
+  @keyframes a-pulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+  @keyframes a-ring { 0%{transform:scale(1);opacity:.5} 100%{transform:scale(2.8);opacity:0} }
+  @keyframes bar-fill { 0%{background-position:0 0} 100%{background-position:20px 0} }
+  .s-icon { display:inline-block; font-size:28px; line-height:1; }
+  .s-reasoning { animation: a-brain 2s ease-in-out infinite; }
+  .s-websearch { animation: a-scan 1.5s ease-in-out infinite; }
+  .s-webfetch { animation: a-globe 3s linear infinite; }
+  .s-read { animation: a-read 2s ease-in-out infinite; }
+  .s-write { animation: a-write 1.2s ease-in-out infinite; }
+  .s-execute { animation: a-spin 2s linear infinite; }
+  .s-glob { animation: a-scan 1.5s ease-in-out infinite; }
+  .s-grep { animation: a-scan 1.5s ease-in-out infinite; }
+  .s-processing { animation: a-pulse 1.5s ease-in-out infinite; }
+  .s-ring { position:absolute; inset:0; border-radius:50%; border:2px solid #ce2b37; animation:a-ring 1.8s ease-out infinite; pointer-events:none; }
   *::-webkit-scrollbar { width: 6px; }
   *::-webkit-scrollbar-track { background: transparent; }
   *::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
@@ -286,6 +306,9 @@ export default function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
+  const [statusAction, setStatusAction] = useState("processing");
+  const [progress, setProgress] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
   const [charlaMode, setCharlaMode] = useState(true);
   const msgsEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -308,10 +331,21 @@ export default function App() {
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
+  /* progress timer while busy */
+  useEffect(() => {
+    if (!busy) { setElapsed(0); return; }
+    const start = Date.now();
+    const interval = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - start) / 1000));
+      setProgress(p => p >= 90 ? p : Math.min(p + (90 - p) * 0.07 + 0.3, 90));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [busy]);
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || busy) return;
-    setBusy(true); setInput(""); setThinkingStatus("⏳ Pensando...");
+    setBusy(true); setInput(""); setThinkingStatus("⏳ Pensando..."); setStatusAction("processing"); setProgress(0); setElapsed(0);
     setMessages((p) => [...p, { role: "user", text }, { role: "bot", text: "", html: "" }]);
     let full = ""; let cur = sessionId; let cid = conversationId;
     const ac = new AbortController();
@@ -334,8 +368,9 @@ export default function App() {
           try { ev = JSON.parse(ln.slice(6)) as Record<string, unknown>; } catch { continue; }
           if (ev["type"] === "session") { cur = ev["session_id"] as string; setSessionId(cur); }
           else if (ev["type"] === "conversation") { cid = ev["conversation_id"] as number; setConversationId(cid); }
-          else if (ev["type"] === "status") { setThinkingStatus(ev["status"] as string); }
+          else if (ev["type"] === "status") { setThinkingStatus(ev["label"] as string); setStatusAction(ev["action"] as string); }
           else if (ev["type"] === "text") {
+            setProgress(90);
             full += ev["text"] as string;
             setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: full, html: md(full) }; return n; });
           } else if (ev["type"] === "error") {
@@ -349,7 +384,7 @@ export default function App() {
       const msg = err instanceof Error ? err.message : String(err);
       setThinkingStatus(null);
       setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: "", html: `<span style="color:#e83030">⚠ ${esc(msg)}</span>` }; return n; });
-    } finally { clearTimeout(overallTimer); setBusy(false); setThinkingStatus(null); setTimeout(() => inputRef.current?.focus(), 50); }
+    } finally { clearTimeout(overallTimer); setBusy(false); setThinkingStatus(null); setProgress(100); setTimeout(() => inputRef.current?.focus(), 50); }
   }, [input, busy, sessionId, conversationId, charlaMode]);
 
   const fetchConversations = useCallback(async () => {
@@ -563,15 +598,40 @@ export default function App() {
             <div ref={msgsEndRef} />
           </div>
 
-          {/* Status bar — visible while the bot is processing */}
+          {/* Status bar — animated panel */}
           {busy && thinkingStatus && (
             <div style={{
-              textAlign: "center", padding: "6px 16px 8px",
-              color: ACCENT, fontSize: 12, fontFamily: SERIF,
-              fontStyle: "italic", background: "#fcfcfc",
-              borderTop: "1px solid " + BORDER, borderBottom: "1px solid " + BORDER,
+              display: "flex", alignItems: "center", gap: 14, padding: "10px 16px",
+              background: "#fcfcfc", borderTop: "1px solid " + BORDER, borderBottom: "1px solid " + BORDER,
             }}>
-              {thinkingStatus}
+              <div style={{ position: "relative", width: 48, height: 48, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                {statusAction === "reasoning" && (
+                  <>
+                    <div className="s-ring" style={{ animationDelay: "0s" }} />
+                    <div className="s-ring" style={{ animationDelay: ".6s" }} />
+                    <div className="s-ring" style={{ animationDelay: "1.2s" }} />
+                  </>
+                )}
+                <span className={"s-icon s-" + statusAction}>
+                  {{reasoning:"🧠",websearch:"🔍",webfetch:"🌐",read:"📄",write:"✍️",execute:"⚙️",glob:"🔎",grep:"🔎",processing:"🔄"}[statusAction] || "🔄"}
+                </span>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ color: ACCENT, fontSize: 13, fontFamily: SERIF, fontWeight: 600 }}>{thinkingStatus}</span>
+                  <span style={{ color: "#999", fontSize: 11, fontFamily: MONO }}>{elapsed}s</span>
+                </div>
+                <div style={{ position: "relative", height: 6, background: "#e8e8e8", borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{
+                    width: progress + "%", height: "100%",
+                    background: "linear-gradient(90deg," + ACCENT + ",#e86060)",
+                    borderRadius: 3, transition: "width .3s ease",
+                  }} />
+                </div>
+                <div style={{ textAlign: "right", marginTop: 2, color: "#999", fontSize: 10, fontFamily: MONO }}>
+                  {Math.round(progress)}%
+                </div>
+              </div>
             </div>
           )}
 
@@ -827,12 +887,37 @@ img{max-width:280px;border:1px solid #e0e0e0}
 
               {busy && thinkingStatus && (
                 <div style={{
-                  textAlign: "center", padding: "6px 16px 8px",
-                  color: ACCENT, fontSize: 12, fontFamily: SERIF,
-                  fontStyle: "italic", background: "#fcfcfc",
-                  borderTop: "1px solid " + BORDER, borderBottom: "1px solid " + BORDER,
+                  display: "flex", alignItems: "center", gap: 14, padding: "10px 16px",
+                  background: "#fcfcfc", borderTop: "1px solid " + BORDER, borderBottom: "1px solid " + BORDER,
                 }}>
-                  {thinkingStatus}
+                  <div style={{ position: "relative", width: 48, height: 48, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                    {statusAction === "reasoning" && (
+                      <>
+                        <div className="s-ring" style={{ animationDelay: "0s" }} />
+                        <div className="s-ring" style={{ animationDelay: ".6s" }} />
+                        <div className="s-ring" style={{ animationDelay: "1.2s" }} />
+                      </>
+                    )}
+                    <span className={"s-icon s-" + statusAction}>
+                      {{reasoning:"🧠",websearch:"🔍",webfetch:"🌐",read:"📄",write:"✍️",execute:"⚙️",glob:"🔎",grep:"🔎",processing:"🔄"}[statusAction] || "🔄"}
+                    </span>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <span style={{ color: ACCENT, fontSize: 13, fontFamily: SERIF, fontWeight: 600 }}>{thinkingStatus}</span>
+                      <span style={{ color: "#999", fontSize: 11, fontFamily: MONO }}>{elapsed}s</span>
+                    </div>
+                    <div style={{ position: "relative", height: 6, background: "#e8e8e8", borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{
+                        width: progress + "%", height: "100%",
+                        background: "linear-gradient(90deg," + ACCENT + ",#e86060)",
+                        borderRadius: 3, transition: "width .3s ease",
+                      }} />
+                    </div>
+                    <div style={{ textAlign: "right", marginTop: 2, color: "#999", fontSize: 10, fontFamily: MONO }}>
+                      {Math.round(progress)}%
+                    </div>
+                  </div>
                 </div>
               )}
 

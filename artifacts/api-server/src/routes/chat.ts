@@ -153,16 +153,16 @@ function buildMessage(message: string, _isNewSession: boolean, charlaMode: boole
 const AUTH_BASIC = Buffer.from(`opencode:${SERVE_PASSWORD}`).toString("base64");
 const AUTH_HEADER = { Authorization: `Basic ${AUTH_BASIC}` };
 
-const TOOL_LABELS: Record<string, string> = {
-  websearch: "🔍 Investigando...",
-  webfetch: "🌐 Analizando fuentes...",
-  read: "📄 Leyendo documentos...",
-  read_file: "📄 Leyendo documentos...",
-  write_file: "✍️ Redactando...",
-  edit: "✍️ Redactando...",
-  bash: "⚙️ Ejecutando...",
-  glob: "🔎 Buscando archivos...",
-  grep: "🔎 Buscando en código...",
+const TOOL_ACTIONS: Record<string, { action: string; label: string }> = {
+  websearch: { action: "websearch", label: "🔍 Investigando..." },
+  webfetch: { action: "webfetch", label: "🌐 Analizando fuentes..." },
+  read: { action: "read", label: "📄 Leyendo documentos..." },
+  read_file: { action: "read", label: "📄 Leyendo documentos..." },
+  write_file: { action: "write", label: "✍️ Redactando..." },
+  edit: { action: "write", label: "✍️ Redactando..." },
+  bash: { action: "execute", label: "⚙️ Ejecutando..." },
+  glob: { action: "glob", label: "🔎 Buscando archivos..." },
+  grep: { action: "grep", label: "🔎 Buscando en código..." },
 };
 
 router.post("/chat", async (req: Request, res: Response) => {
@@ -311,11 +311,11 @@ router.post("/chat", async (req: Request, res: Response) => {
               const pType = part.type as string;
 
               if (pType === "reasoning") {
-                res.write(sse({ type: "status", status: "🧠 Razonando..." }));
+                res.write(sse({ type: "status", action: "reasoning", label: "🧠 Razonando..." }));
               } else if (pType === "tool" || pType === "tool-call") {
                 const tool = part.tool as string;
-                const label = TOOL_LABELS[tool] || "🔄 Procesando...";
-                res.write(sse({ type: "status", status: label }));
+                const ta = TOOL_ACTIONS[tool];
+                res.write(sse({ type: "status", action: ta?.action || "processing", label: ta?.label || "🔄 Procesando..." }));
               } else if (pType === "text") {
                 partTextIds.add(pId);
                 const text = (part.text as string) || "";
