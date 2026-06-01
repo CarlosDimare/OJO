@@ -21,7 +21,7 @@ BACKEND_PID=$!
 
 # Wait for backend to be ready
 for i in $(seq 1 15); do
-  if curl -s http://localhost:${BACKEND_PORT}/api/redaccion >/dev/null 2>&1; then
+  if curl -s http://localhost:${BACKEND_PORT}/api/healthz >/dev/null 2>&1; then
     echo "Backend ready on port ${BACKEND_PORT}"
     break
   fi

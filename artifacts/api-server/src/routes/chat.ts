@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { spawn, type ChildProcess } from "child_process";
+import { spawn } from "child_process";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
@@ -7,13 +7,14 @@ import type { Request, Response } from "express";
 import { store } from "../lib/store";
 import { logger } from "../lib/logger";
 
-// Resolve opencode binary
+// Resolve opencode binary (only needed to start serve)
 const __dir = dirname(fileURLToPath(import.meta.url));
+const BIN = process.platform === "win32" ? "opencode.CMD" : "opencode";
 const CANDIDATES = [
-  resolve(__dir, "../../node_modules/.bin/opencode"),
-  resolve(__dir, "../node_modules/.bin/opencode"),
-  resolve(__dir, "../../../node_modules/.bin/opencode"),
-  resolve(__dir, "../../../../node_modules/.bin/opencode"),
+  resolve(__dir, `../../node_modules/.bin/${BIN}`),
+  resolve(__dir, `../node_modules/.bin/${BIN}`),
+  resolve(__dir, `../../../node_modules/.bin/${BIN}`),
+  resolve(__dir, `../../../../node_modules/.bin/${BIN}`),
   "/usr/local/bin/opencode",
 ];
 const OPENCODE = CANDIDATES.find(existsSync) || "opencode";
@@ -22,23 +23,24 @@ logger.info({ opencode: OPENCODE }, "chat route initialized");
 const OPENCODE_TIMEOUT_MS = 120_000;
 const SERVE_PORT = 4200;
 const SERVE_PASSWORD = "ojo-serve-local";
+const SERVE_URL = `http://127.0.0.1:${SERVE_PORT}`;
 
 /* ── opencode serve lifecycle ── */
 
-let serveProc: ChildProcess | null = null;
-let serveUrl: string | null = null;
+let serveProc: any = null;
+let serveReady = false;
 let serveReadyPromise: Promise<void> | null = null;
-let serveStarting = false;
 
 export async function initServe(): Promise<void> {
-  if (serveUrl) return;
+  if (serveReady) return;
   if (serveReadyPromise) return serveReadyPromise;
 
-  serveStarting = true;
   serveReadyPromise = new Promise<void>((resolve, reject) => {
     logger.info({ port: SERVE_PORT }, "starting opencode serve");
     try {
-      const proc = spawn(OPENCODE, ["serve", "--port", String(SERVE_PORT), "--print-logs"], {
+      const isWin = process.platform === "win32";
+      const spawnArgs = isWin ? { cmd: "cmd.exe", args: ["/c", OPENCODE, "serve", "--port", String(SERVE_PORT), "--print-logs"] } : { cmd: OPENCODE, args: ["serve", "--port", String(SERVE_PORT), "--print-logs"] };
+      const proc = spawn(spawnArgs.cmd, spawnArgs.args, {
         stdio: ["ignore", "pipe", "pipe"],
         env: { ...process.env, OPENCODE_SERVER_PASSWORD: SERVE_PASSWORD },
       });
@@ -50,33 +52,31 @@ export async function initServe(): Promise<void> {
 
       proc.stdout!.setEncoding("utf8");
       proc.stdout!.on("data", (d: string) => {
-        if (!serveUrl && d.includes("listening on")) {
-          serveUrl = `http://127.0.0.1:${SERVE_PORT}`;
-          logger.info({ serveUrl }, "opencode serve ready");
+        if (!serveReady && d.includes("listening on")) {
+          serveReady = true;
+          logger.info({ serveUrl: SERVE_URL }, "opencode serve ready");
           resolve();
         }
       });
 
-      proc.on("error", (err) => {
+      proc.on("error", (err: Error) => {
         logger.error({ err }, "opencode serve process error");
-        serveProc = null; serveStarting = false;
+        serveProc = null; serveReady = false;
         reject(err);
       });
 
-      proc.on("exit", (code) => {
-        const wasReady = !!serveUrl;
+      proc.on("exit", (code: number | null) => {
+        const wasReady = serveReady;
         logger.warn({ code, stderr: stderrBuf.slice(0, 300) }, "opencode serve exited");
-        serveProc = null; serveUrl = null; serveReadyPromise = null; serveStarting = false;
+        serveProc = null; serveReady = false; serveReadyPromise = null;
         if (!wasReady) reject(new Error(`serve exited (${code}): ${stderrBuf.slice(0, 200)}`));
-        // Auto-restart after a short delay
         else setTimeout(() => { void initServe(); }, 1500);
       });
 
       setTimeout(() => {
-        if (!serveUrl) { serveStarting = false; reject(new Error("serve startup timeout")); }
+        if (!serveReady) { reject(new Error("serve startup timeout")); }
       }, 20_000);
     } catch (err) {
-      serveStarting = false;
       logger.error({ err }, "failed to spawn opencode serve");
       reject(err);
     }
@@ -89,11 +89,11 @@ export function stopServe(): void {
   if (serveProc) {
     logger.info("stopping opencode serve");
     serveProc.kill();
-    serveProc = null; serveUrl = null; serveReadyPromise = null; serveStarting = false;
+    serveProc = null; serveReady = false; serveReadyPromise = null;
   }
 }
 
-// Start serve in background at import time; first request will await it if needed
+// Start serve in background at import time
 void initServe();
 
 const router = Router();
@@ -142,6 +142,9 @@ function buildMessage(message: string, isNewSession: boolean, charlaMode: boolea
   return `[Fecha y hora actual: ${now}]\n\n${message}`;
 }
 
+const AUTH_BASIC = Buffer.from(`opencode:${SERVE_PASSWORD}`).toString("base64");
+const AUTH_HEADER = { Authorization: `Basic ${AUTH_BASIC}` };
+
 router.post("/chat", async (req: Request, res: Response) => {
   const { message, session_id, conversation_id, charla_mode } = req.body as {
     message?: string;
@@ -172,10 +175,8 @@ router.post("/chat", async (req: Request, res: Response) => {
   store.createMessage(convId, "user", message.trim());
 
   /* ── Ensure opencode serve is ready ── */
-  let attachUrl: string;
   try {
     await initServe();
-    attachUrl = serveUrl!;
   } catch (err) {
     log.error({ err }, "opencode serve unavailable");
     res.writeHead(200, {
@@ -189,10 +190,6 @@ router.post("/chat", async (req: Request, res: Response) => {
     return;
   }
 
-  const args = ["run", "--attach", attachUrl, "--password", SERVE_PASSWORD, "--format", "json"];
-  if (session_id) args.push("--session", session_id);
-  args.push(fullMessage);
-
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
@@ -200,63 +197,62 @@ router.post("/chat", async (req: Request, res: Response) => {
     "X-Accel-Buffering": "no",
   });
 
-  // Send conversation_id so frontend can track it
   res.write(sse({ type: "conversation", conversation_id: convId }));
 
-  /* ── Spawn opencode ── */
-  let proc: ReturnType<typeof spawn>;
+  /* ── Call opencode serve REST API ── */
+  let currentSid = session_id || "";
   const startTime = Date.now();
-  log.info({ opencode: OPENCODE, args }, "spawning opencode");
-
-  try {
-    proc = spawn(OPENCODE, args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env },
-    });
-  } catch (err: unknown) {
-    log.error({ err }, "failed to spawn opencode");
-    res.write(sse({ type: "error", message: "opencode not found: " + String(err) }));
-    res.end();
-    return;
-  }
-
-  /* ── Process timeout ── */
-  const killTimer = setTimeout(() => {
-    log.warn("opencode process timed out, killing");
-    try { proc.kill(9); } catch {}
-  }, OPENCODE_TIMEOUT_MS);
-
-  let sessionSent = false;
   let botContent = "";
 
-  proc.stdout!.setEncoding("utf8");
-  proc.stdout!.on("data", (chunk: string) => {
-    for (const raw of chunk.split("\n")) {
-      const line = raw.trim();
-      if (!line) continue;
-      let event: Record<string, unknown>;
-      try { event = JSON.parse(line) as Record<string, unknown>; }
-      catch { continue; }
-
-      const evType = event["type"] as string;
-
-      if (!sessionSent && event["sessionID"]) {
-        const sid = event["sessionID"] as string;
-        res.write(sse({ type: "session", session_id: sid }));
-        sessionSent = true;
-        if (convId) {
-          store.updateConversation(convId, { sessionId: sid });
-        }
+  try {
+    // Create session if new
+    if (!currentSid) {
+      const createRes = await fetch(`${SERVE_URL}/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...AUTH_HEADER },
+        body: "{}",
+      });
+      if (!createRes.ok) {
+        throw new Error(`session create failed: ${createRes.status}`);
       }
+      const sessionData = await createRes.json() as Record<string, unknown>;
+      currentSid = sessionData.id as string;
+      res.write(sse({ type: "session", session_id: currentSid }));
+      if (convId) {
+        store.updateConversation(convId, { sessionId: currentSid });
+      }
+    }
 
-      if (evType === "step_start") {
-        res.write(sse({ type: "status", status: "..." }));
+    // Send message
+    const msgRes = await fetch(`${SERVE_URL}/session/${currentSid}/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...AUTH_HEADER },
+      body: JSON.stringify({
+        parts: [{ type: "text", text: fullMessage }],
+      }),
+      signal: AbortSignal.timeout(OPENCODE_TIMEOUT_MS),
+    });
+
+    if (!msgRes.ok) {
+      const errText = await msgRes.text().catch(() => "unknown error");
+      throw new Error(`message send failed (${msgRes.status}): ${errText.slice(0, 300)}`);
+    }
+
+    const data = await msgRes.json() as Record<string, unknown>;
+    const parts = (data.parts || []) as Array<Record<string, unknown>>;
+
+    for (const part of parts) {
+      const t = part.type as string;
+
+      if (t === "reasoning") {
+        const tx = part.text as string;
+        if (!tx) continue;
+        res.write(sse({ type: "status", status: "Razonando..." }));
         continue;
       }
 
-      if (evType === "tool_use") {
-        const part = (event["part"] ?? {}) as Record<string, unknown>;
-        const tool = (part["tool"] as string) || "";
+      if (t === "tool-call") {
+        const tool = part.tool as string;
         const label: Record<string, string> = {
           websearch: "Investigando...",
           webfetch: "Analizando fuentes...",
@@ -270,45 +266,34 @@ router.post("/chat", async (req: Request, res: Response) => {
         continue;
       }
 
-      const part = (event["part"] ?? {}) as Record<string, unknown>;
+      if (t === "tool-result") {
+        continue;
+      }
 
-      if (evType === "text" && part["type"] === "text" && part["text"]) {
-        const text = part["text"] as string;
-        botContent += text;
-        res.write(sse({ type: "text", text }));
+      if (t === "text") {
+        const text = part.text as string;
+        if (text) {
+          botContent += text;
+          res.write(sse({ type: "text", text }));
+        }
       }
     }
-  });
 
-  let stderrBuf = "";
-  proc.stderr!.setEncoding("utf8");
-  proc.stderr!.on("data", (d: string) => { stderrBuf += d; });
-
-  proc.on("close", async (code: number | null) => {
-    clearTimeout(killTimer);
     const elapsed = Date.now() - startTime;
-    log.info({ code, elapsed, botLen: botContent.length, stderr: stderrBuf.slice(0, 200) }, "opencode closed");
-    if (code !== 0 && stderrBuf.trim()) {
-      res.write(sse({ type: "error", message: stderrBuf.trim().slice(0, 400) }));
-    }
+    log.info({ elapsed, botLen: botContent.length }, "opencode serve response received");
+
     if (botContent.trim()) {
       store.createMessage(convId!, "bot", botContent.trim());
     }
-    res.write(sse({ type: "done" }));
-    res.end();
-  });
 
-  proc.on("error", (err: Error) => {
-    clearTimeout(killTimer);
-    log.error({ err }, "opencode process error");
-    res.write(sse({ type: "error", message: err.message }));
-    res.end();
-  });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.error({ err }, "opencode serve request failed");
+    res.write(sse({ type: "error", message: msg }));
+  }
 
-  res.on("close", () => {
-    clearTimeout(killTimer);
-    try { proc.kill(); } catch {}
-  });
+  res.write(sse({ type: "done" }));
+  res.end();
 });
 
 export default router;
