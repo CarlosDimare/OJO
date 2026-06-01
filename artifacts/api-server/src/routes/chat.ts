@@ -271,6 +271,7 @@ router.post("/chat", async (req: Request, res: Response) => {
     const decoder = new TextDecoder();
     let buf = "";
     let assistantMsgIds = new Set<string>();
+    let partTextIds = new Set<string>();
     let partTextLen = new Map<string, number>();
     let sessionDone = false;
     const timeoutId = setTimeout(() => ac.abort(), OPENCODE_TIMEOUT_MS);
@@ -316,6 +317,7 @@ router.post("/chat", async (req: Request, res: Response) => {
                 const label = TOOL_LABELS[tool] || "🔄 Procesando...";
                 res.write(sse({ type: "status", status: label }));
               } else if (pType === "text") {
+                partTextIds.add(pId);
                 const text = (part.text as string) || "";
                 if (text) {
                   const prevLen = partTextLen.get(pId) || 0;
@@ -334,7 +336,7 @@ router.post("/chat", async (req: Request, res: Response) => {
               if (!assistantMsgIds.has(msgId)) break;
 
               const pId = props.partID as string;
-              if (props.field === "text") {
+              if (partTextIds.has(pId) && props.field === "text") {
                 const delta = props.delta as string;
                 if (delta) {
                   botContent += delta;
