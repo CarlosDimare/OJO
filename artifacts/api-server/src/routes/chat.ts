@@ -145,6 +145,18 @@ function buildMessage(message: string, isNewSession: boolean, charlaMode: boolea
 const AUTH_BASIC = Buffer.from(`opencode:${SERVE_PASSWORD}`).toString("base64");
 const AUTH_HEADER = { Authorization: `Basic ${AUTH_BASIC}` };
 
+const TOOL_LABELS: Record<string, string> = {
+  websearch: "🔍 Investigando...",
+  webfetch: "🌐 Analizando fuentes...",
+  read: "📄 Leyendo documentos...",
+  read_file: "📄 Leyendo documentos...",
+  write_file: "✍️ Redactando...",
+  edit: "✍️ Redactando...",
+  bash: "⚙️ Ejecutando...",
+  glob: "🔎 Buscando archivos...",
+  grep: "🔎 Buscando en código...",
+};
+
 router.post("/chat", async (req: Request, res: Response) => {
   const { message, session_id, conversation_id, charla_mode } = req.body as {
     message?: string;
@@ -199,7 +211,7 @@ router.post("/chat", async (req: Request, res: Response) => {
 
   res.write(sse({ type: "conversation", conversation_id: convId }));
 
-  /* ── Call opencode serve REST API ── */
+  /* ── Call opencode serve REST API with real-time SSE streaming ── */
   let currentSid = session_id || "";
   const startTime = Date.now();
   let botContent = "";
@@ -223,60 +235,116 @@ router.post("/chat", async (req: Request, res: Response) => {
       }
     }
 
-    // Send message
-    const msgRes = await fetch(`${SERVE_URL}/session/${currentSid}/message`, {
+    // Connect to opencode event stream (SSE)
+    const ac = new AbortController();
+    const eventResp = await fetch(`${SERVE_URL}/event`, {
+      headers: AUTH_HEADER,
+      signal: ac.signal,
+    });
+    if (!eventResp.ok || !eventResp.body) {
+      throw new Error(`event stream connect failed: ${eventResp.status}`);
+    }
+
+    // Send async message (non-blocking, returns 204 immediately)
+    const promptResp = await fetch(`${SERVE_URL}/session/${currentSid}/prompt_async`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...AUTH_HEADER },
       body: JSON.stringify({
         parts: [{ type: "text", text: fullMessage }],
       }),
-      signal: AbortSignal.timeout(OPENCODE_TIMEOUT_MS),
     });
-
-    if (!msgRes.ok) {
-      const errText = await msgRes.text().catch(() => "unknown error");
-      throw new Error(`message send failed (${msgRes.status}): ${errText.slice(0, 300)}`);
+    if (!promptResp.ok) {
+      ac.abort();
+      throw new Error(`prompt_async failed: ${promptResp.status}`);
     }
 
-    const data = await msgRes.json() as Record<string, unknown>;
-    const parts = (data.parts || []) as Array<Record<string, unknown>>;
+    // Read events from SSE stream, forwarding to frontend in real-time
+    const reader = eventResp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let partTypes = new Map<string, string>();
+    let assistantMsgIds = new Set<string>();
+    let sessionDone = false;
+    const timeoutId = setTimeout(() => ac.abort(), OPENCODE_TIMEOUT_MS);
 
-    for (const part of parts) {
-      const t = part.type as string;
+    try {
+      while (!sessionDone) {
+        const { value, done } = await reader.read();
+        if (done) break;
 
-      if (t === "reasoning") {
-        const tx = part.text as string;
-        if (!tx) continue;
-        res.write(sse({ type: "status", status: "Razonando..." }));
-        continue;
-      }
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
 
-      if (t === "tool-call") {
-        const tool = part.tool as string;
-        const label: Record<string, string> = {
-          websearch: "Investigando...",
-          webfetch: "Analizando fuentes...",
-          read: "Leyendo documentos...",
-          read_file: "Leyendo documentos...",
-          write_file: "Redactando...",
-          edit: "Redactando...",
-          bash: "Ejecutando...",
-        };
-        res.write(sse({ type: "status", status: label[tool] || "Procesando..." }));
-        continue;
-      }
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
 
-      if (t === "tool-result") {
-        continue;
-      }
+          let evt: Record<string, unknown>;
+          try { evt = JSON.parse(line.slice(6)); } catch { continue; }
 
-      if (t === "text") {
-        const text = part.text as string;
-        if (text) {
-          botContent += text;
-          res.write(sse({ type: "text", text }));
+          const props = evt.properties as Record<string, unknown> | undefined;
+          if (!props || props.sessionID !== currentSid) continue;
+
+          switch (evt.type) {
+            case "message.updated": {
+              const info = props.info as Record<string, unknown> | undefined;
+              if (info && (info.role as string) === "assistant") {
+                assistantMsgIds.add(info.id as string);
+              }
+              break;
+            }
+            case "message.part.updated": {
+              const part = props.part as Record<string, unknown>;
+              const msgId = part.messageID as string;
+              if (!assistantMsgIds.has(msgId)) break;
+
+              const pId = part.id as string;
+              const pType = part.type as string;
+              partTypes.set(pId, pType);
+
+              if (pType === "reasoning") {
+                res.write(sse({ type: "status", status: "🧠 Razonando..." }));
+              } else if (pType === "tool" || pType === "tool-call") {
+                const tool = part.tool as string;
+                const label = TOOL_LABELS[tool] || "🔄 Procesando...";
+                res.write(sse({ type: "status", status: label }));
+              } else if (pType === "text") {
+                const text = (part.text as string) || "";
+                if (text) {
+                  botContent += text;
+                  res.write(sse({ type: "text", text }));
+                }
+              }
+              break;
+            }
+            case "message.part.delta": {
+              const msgId = props.messageID as string;
+              if (!assistantMsgIds.has(msgId)) break;
+
+              const pId = props.partID as string;
+              const pType = partTypes.get(pId);
+              if (pType === "text" && props.field === "text") {
+                const delta = props.delta as string;
+                if (delta) {
+                  botContent += delta;
+                  res.write(sse({ type: "text", text: delta }));
+                }
+              }
+              break;
+            }
+            case "session.status": {
+              const status = props.status as Record<string, string>;
+              if (status.type === "idle") {
+                sessionDone = true;
+              }
+              break;
+            }
+          }
         }
       }
+    } finally {
+      clearTimeout(timeoutId);
+      ac.abort();
     }
 
     const elapsed = Date.now() - startTime;
@@ -288,7 +356,14 @@ router.post("/chat", async (req: Request, res: Response) => {
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    log.error({ err }, "opencode serve request failed");
+    if (err instanceof Error && err.name === "AbortError") {
+      log.warn({ err }, "opencode serve request timed out");
+    } else {
+      log.error({ err }, "opencode serve request failed");
+    }
+    if (botContent.trim()) {
+      store.createMessage(convId!, "bot", botContent.trim());
+    }
     res.write(sse({ type: "error", message: msg }));
   }
 
