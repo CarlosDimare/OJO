@@ -12,7 +12,7 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "opencode-ai": "^1.15.4",
+    "opencode-ai": "^1.15.13",
     "pino": "^9.14.0",
     "pino-http": "^10.5.0"
   },

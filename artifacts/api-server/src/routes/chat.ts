@@ -20,15 +20,23 @@ const CANDIDATES = [
 const OPENCODE = CANDIDATES.find(existsSync) || "opencode";
 logger.info({ opencode: OPENCODE }, "chat route initialized");
 
-const OPENCODE_TIMEOUT_MS = 120_000;
-const SERVE_PORT = 4200;
+const OPENCODE_TIMEOUT_MS = 300_000;
 const SERVE_PASSWORD = "ojo-serve-local";
-const SERVE_URL = `http://127.0.0.1:${SERVE_PORT}`;
 
 /* ── opencode serve lifecycle ── */
 
+// Strip opencode session env vars so the child serve doesn't get confused
+function stripOpenCodeEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  const out = { ...env };
+  for (const key of Object.keys(out)) {
+    if (key === "OPENCODE" || (key.startsWith("OPENCODE_") && key !== "OPENCODE_SERVER_PASSWORD")) delete out[key];
+  }
+  return out;
+}
+
 let serveProc: any = null;
 let serveReady = false;
+let serveUrl = "";
 let serveReadyPromise: Promise<void> | null = null;
 
 export async function initServe(): Promise<void> {
@@ -36,13 +44,13 @@ export async function initServe(): Promise<void> {
   if (serveReadyPromise) return serveReadyPromise;
 
   serveReadyPromise = new Promise<void>((resolve, reject) => {
-    logger.info({ port: SERVE_PORT }, "starting opencode serve");
+    logger.info("starting opencode serve (random port)");
     try {
       const isWin = process.platform === "win32";
-      const spawnArgs = isWin ? { cmd: "cmd.exe", args: ["/c", OPENCODE, "serve", "--port", String(SERVE_PORT), "--print-logs"] } : { cmd: OPENCODE, args: ["serve", "--port", String(SERVE_PORT), "--print-logs"] };
+      const spawnArgs = isWin ? { cmd: "cmd.exe", args: ["/c", OPENCODE, "serve", "--port", "0", "--print-logs"] } : { cmd: OPENCODE, args: ["serve", "--port", "0", "--print-logs"] };
       const proc = spawn(spawnArgs.cmd, spawnArgs.args, {
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, OPENCODE_SERVER_PASSWORD: SERVE_PASSWORD },
+        env: { ...stripOpenCodeEnv(process.env), OPENCODE_SERVER_PASSWORD: SERVE_PASSWORD },
       });
       serveProc = proc;
 
@@ -53,8 +61,11 @@ export async function initServe(): Promise<void> {
       proc.stdout!.setEncoding("utf8");
       proc.stdout!.on("data", (d: string) => {
         if (!serveReady && d.includes("listening on")) {
+          const match = d.match(/https?:\/\/[^\s]+/);
+          if (match) serveUrl = match[0];
+          else serveUrl = `http://127.0.0.1:4200`;
           serveReady = true;
-          logger.info({ serveUrl: SERVE_URL }, "opencode serve ready");
+          logger.info({ serveUrl }, "opencode serve ready");
           resolve();
         }
       });
@@ -68,7 +79,7 @@ export async function initServe(): Promise<void> {
       proc.on("exit", (code: number | null) => {
         const wasReady = serveReady;
         logger.warn({ code, stderr: stderrBuf.slice(0, 300) }, "opencode serve exited");
-        serveProc = null; serveReady = false; serveReadyPromise = null;
+        serveProc = null; serveReady = false; serveReadyPromise = null; serveUrl = "";
         if (!wasReady) reject(new Error(`serve exited (${code}): ${stderrBuf.slice(0, 200)}`));
         else setTimeout(() => { void initServe(); }, 1500);
       });
@@ -89,7 +100,7 @@ export function stopServe(): void {
   if (serveProc) {
     logger.info("stopping opencode serve");
     serveProc.kill();
-    serveProc = null; serveReady = false; serveReadyPromise = null;
+    serveProc = null; serveReady = false; serveReadyPromise = null; serveUrl = "";
   }
 }
 
@@ -129,17 +140,14 @@ function sse(obj: Record<string, unknown>): string {
   return `data: ${JSON.stringify(obj)}\n\n`;
 }
 
-function buildMessage(message: string, isNewSession: boolean, charlaMode: boolean): string {
+function buildMessage(message: string, _isNewSession: boolean, charlaMode: boolean): string {
   const now = new Date().toLocaleString("es-AR", {
     timeZone: "America/Argentina/Buenos_Aires",
     dateStyle: "full",
     timeStyle: "short",
   });
   const prompt = charlaMode ? SYSTEM_PROMPT_CHARLA : SYSTEM_PROMPT;
-  if (isNewSession) {
-    return `[INSTRUCCIONES DEL SISTEMA]\n${prompt}\n\nFecha y hora actual: ${now}\n\n[PREGUNTA DEL USUARIO]\n${message}`;
-  }
-  return `[Fecha y hora actual: ${now}]\n\n${message}`;
+  return `[INSTRUCCIONES DEL SISTEMA]\n${prompt}\n\nFecha y hora actual: ${now}\n\n[PREGUNTA DEL USUARIO]\n${message}`;
 }
 
 const AUTH_BASIC = Buffer.from(`opencode:${SERVE_PASSWORD}`).toString("base64");
@@ -219,7 +227,7 @@ router.post("/chat", async (req: Request, res: Response) => {
   try {
     // Create session if new
     if (!currentSid) {
-      const createRes = await fetch(`${SERVE_URL}/session`, {
+      const createRes = await fetch(`${serveUrl}/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...AUTH_HEADER },
         body: "{}",
@@ -237,7 +245,7 @@ router.post("/chat", async (req: Request, res: Response) => {
 
     // Connect to opencode event stream (SSE)
     const ac = new AbortController();
-    const eventResp = await fetch(`${SERVE_URL}/event`, {
+    const eventResp = await fetch(`${serveUrl}/event`, {
       headers: AUTH_HEADER,
       signal: ac.signal,
     });
@@ -246,7 +254,7 @@ router.post("/chat", async (req: Request, res: Response) => {
     }
 
     // Send async message (non-blocking, returns 204 immediately)
-    const promptResp = await fetch(`${SERVE_URL}/session/${currentSid}/prompt_async`, {
+    const promptResp = await fetch(`${serveUrl}/session/${currentSid}/prompt_async`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...AUTH_HEADER },
       body: JSON.stringify({
@@ -262,9 +270,8 @@ router.post("/chat", async (req: Request, res: Response) => {
     const reader = eventResp.body.getReader();
     const decoder = new TextDecoder();
     let buf = "";
-    let partTypes = new Map<string, string>();
     let assistantMsgIds = new Set<string>();
-    let deltaParts = new Set<string>();
+    let partTextLen = new Map<string, number>();
     let sessionDone = false;
     const timeoutId = setTimeout(() => ac.abort(), OPENCODE_TIMEOUT_MS);
 
@@ -301,7 +308,6 @@ router.post("/chat", async (req: Request, res: Response) => {
 
               const pId = part.id as string;
               const pType = part.type as string;
-              partTypes.set(pId, pType);
 
               if (pType === "reasoning") {
                 res.write(sse({ type: "status", status: "🧠 Razonando..." }));
@@ -310,11 +316,15 @@ router.post("/chat", async (req: Request, res: Response) => {
                 const label = TOOL_LABELS[tool] || "🔄 Procesando...";
                 res.write(sse({ type: "status", status: label }));
               } else if (pType === "text") {
-                if (deltaParts.has(pId)) break;
                 const text = (part.text as string) || "";
                 if (text) {
-                  botContent += text;
-                  res.write(sse({ type: "text", text }));
+                  const prevLen = partTextLen.get(pId) || 0;
+                  if (text.length > prevLen) {
+                    const newText = text.slice(prevLen);
+                    botContent += newText;
+                    res.write(sse({ type: "text", text: newText }));
+                    partTextLen.set(pId, text.length);
+                  }
                 }
               }
               break;
@@ -324,13 +334,13 @@ router.post("/chat", async (req: Request, res: Response) => {
               if (!assistantMsgIds.has(msgId)) break;
 
               const pId = props.partID as string;
-              const pType = partTypes.get(pId);
-              if (pType === "text" && props.field === "text") {
-                deltaParts.add(pId);
+              if (props.field === "text") {
                 const delta = props.delta as string;
                 if (delta) {
                   botContent += delta;
                   res.write(sse({ type: "text", text: delta }));
+                  const prevLen = partTextLen.get(pId) || 0;
+                  partTextLen.set(pId, prevLen + delta.length);
                 }
               }
               break;

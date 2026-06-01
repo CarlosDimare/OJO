@@ -311,11 +311,11 @@ export default function App() {
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || busy) return;
-    setBusy(true); setInput(""); setThinkingStatus("...");
+    setBusy(true); setInput(""); setThinkingStatus("⏳ Pensando...");
     setMessages((p) => [...p, { role: "user", text }, { role: "bot", text: "", html: "" }]);
     let full = ""; let cur = sessionId; let cid = conversationId;
     const ac = new AbortController();
-    const overallTimer = setTimeout(() => ac.abort(), 180_000);
+    const overallTimer = setTimeout(() => ac.abort(), 300_000);
     try {
       const res = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -336,7 +336,6 @@ export default function App() {
           else if (ev["type"] === "conversation") { cid = ev["conversation_id"] as number; setConversationId(cid); }
           else if (ev["type"] === "status") { setThinkingStatus(ev["status"] as string); }
           else if (ev["type"] === "text") {
-            setThinkingStatus(null);
             full += ev["text"] as string;
             setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: full, html: md(full) }; return n; });
           } else if (ev["type"] === "error") {
@@ -350,7 +349,7 @@ export default function App() {
       const msg = err instanceof Error ? err.message : String(err);
       setThinkingStatus(null);
       setMessages((p) => { const n = [...p]; n[n.length - 1] = { role: "bot", text: "", html: `<span style="color:#e83030">⚠ ${esc(msg)}</span>` }; return n; });
-    } finally { clearTimeout(overallTimer); setBusy(false); setTimeout(() => inputRef.current?.focus(), 50); }
+    } finally { clearTimeout(overallTimer); setBusy(false); setThinkingStatus(null); setTimeout(() => inputRef.current?.focus(), 50); }
   }, [input, busy, sessionId, conversationId, charlaMode]);
 
   const fetchConversations = useCallback(async () => {
@@ -550,10 +549,6 @@ export default function App() {
                     <span style={{ fontFamily: MONO, fontSize: 13, color: TEXT }}>{m.text}</span>
                   ) : m.html ? (
                     <span dangerouslySetInnerHTML={{ __html: m.html }} />
-                  ) : thinkingStatus ? (
-                    <span style={{ color: TEXT_MUTED, fontSize: 12, fontStyle: "italic", fontFamily: SERIF }}>
-                      {thinkingStatus}
-                    </span>
                   ) : (
                     <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
                       {[0, .25, .5].map((d, j) => (
@@ -568,8 +563,20 @@ export default function App() {
             <div ref={msgsEndRef} />
           </div>
 
+          {/* Status bar — visible while the bot is processing */}
+          {busy && thinkingStatus && (
+            <div style={{
+              textAlign: "center", padding: "6px 16px 8px",
+              color: ACCENT, fontSize: 12, fontFamily: SERIF,
+              fontStyle: "italic", background: "#fcfcfc",
+              borderTop: "1px solid " + BORDER, borderBottom: "1px solid " + BORDER,
+            }}>
+              {thinkingStatus}
+            </div>
+          )}
+
           <div style={{
-            borderTop: "1px solid " + BORDER, padding: "12px 16px 16px",
+            padding: "12px 16px 16px",
             background: BG, display: "flex", gap: 8, flexShrink: 0, alignItems: "flex-end",
           }}>
             <textarea
@@ -696,10 +703,6 @@ export default function App() {
                         <span style={{ fontFamily: MONO, fontSize: 13, color: TEXT }}>{m.text}</span>
                       ) : m.html ? (
                         <span dangerouslySetInnerHTML={{ __html: m.html }} />
-                      ) : thinkingStatus ? (
-                        <span style={{ color: TEXT_MUTED, fontSize: 12, fontStyle: "italic", fontFamily: SERIF }}>
-                          {thinkingStatus}
-                        </span>
                       ) : (
                         <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
                           {[0, .25, .5].map((d, j) => (
@@ -822,8 +825,19 @@ img{max-width:280px;border:1px solid #e0e0e0}
                 <div ref={msgsEndRef} />
               </div>
 
+              {busy && thinkingStatus && (
+                <div style={{
+                  textAlign: "center", padding: "6px 16px 8px",
+                  color: ACCENT, fontSize: 12, fontFamily: SERIF,
+                  fontStyle: "italic", background: "#fcfcfc",
+                  borderTop: "1px solid " + BORDER, borderBottom: "1px solid " + BORDER,
+                }}>
+                  {thinkingStatus}
+                </div>
+              )}
+
               <div style={{
-                borderTop: "1px solid " + BORDER, padding: "12px 16px 16px",
+                padding: "12px 16px 16px",
                 background: BG, display: "flex", gap: 8, flexShrink: 0, alignItems: "flex-end",
               }}>
                 <input
