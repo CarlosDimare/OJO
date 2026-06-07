@@ -41,7 +41,7 @@ RUN yes | sdkmanager --licenses > /dev/null 2>&1 || true && \
 WORKDIR /build
 COPY app/ ./app/
 COPY scripts/ ./scripts/
-COPY gradlew settings.gradle build.gradle ./
+COPY gradlew settings.gradle build.gradle gradle.properties ./
 COPY gradle/ ./gradle/
 
 # --- Crear dir de assets ---
