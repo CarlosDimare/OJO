@@ -47,7 +47,7 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> statusText.setText(msg));
     }
 
-    private void setProgress(int pct) {
+    private void updateProgress(int pct) {
         runOnUiThread(() -> progressBar.setProgress(pct));
     }
 
@@ -105,7 +105,7 @@ public class MainActivity extends Activity {
             setStatus(values[0]);
             try {
                 int pct = Integer.parseInt(values[1]);
-                if (pct >= 0) setProgress(pct);
+                if (pct >= 0) updateProgress(pct);
             } catch (NumberFormatException ignored) {}
         }
 
