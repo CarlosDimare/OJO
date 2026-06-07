@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#0a0a0a"
+    android:padding="32dp">
+
+    <!-- Logo / título -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="⬡ OpenCode"
+        android:textColor="#00ff88"
+        android:textSize="32sp"
+        android:fontFamily="monospace"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="AI Coding Agent"
+        android:textColor="#555555"
+        android:textSize="14sp"
+        android:fontFamily="monospace"
+        android:layout_marginBottom="48dp" />
+
+    <!-- Progress bar -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:max="100"
+        android:progress="0"
+        android:progressTint="#00ff88"
+        android:progressBackgroundTint="#1a1a1a"
+        android:layout_marginBottom="16dp"
+        android:visibility="gone" />
+
+    <!-- Status text -->
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Iniciando..."
+        android:textColor="#888888"
+        android:textSize="13sp"
+        android:fontFamily="monospace" />
+
+</LinearLayout>

@@ -47,3 +47,15 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Android build outputs
+output/
+app/build/
+app/src/main/assets/proot-static-arm64
+app/src/main/assets/alpine-arm64.tar.gz
+app/src/main/assets/bun-linux-aarch64.zip
+*.apk
+*.keystore
+opencode-android.zip
+
+
