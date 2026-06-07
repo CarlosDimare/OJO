@@ -89,7 +89,8 @@ jobs:
             -keypass android \
             -dname "CN=OpenCode,O=OpenCode,C=AR" \
             -storetype PKCS12 2>/dev/null
-          ls $ANDROID_HOME/build-tools/*/apksigner | head -1 | xargs -I{} {} sign \
+          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | head -1)
+          "$APKSIGNER" sign \
             --ks /tmp/debug.keystore \
             --ks-key-alias opencode \
             --ks-pass pass:android \
