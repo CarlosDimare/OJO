@@ -49,6 +49,7 @@ public class ChatFragment extends Fragment {
     private final AtomicBoolean isProcessing = new AtomicBoolean(false);
     private Timer statusTimer;
     private int thinkingDotCount = 0;
+    private boolean responseAdded;
 
     public void setClient(OpenCodeClient c) {
         this.client = c;
@@ -106,6 +107,25 @@ public class ChatFragment extends Fragment {
         });
     }
 
+    private void addAiMessage(Models.MessageResponse resp) {
+        if (resp == null || resp.info == null || resp.parts == null || resp.parts.isEmpty()) return;
+        if (responseAdded) return;
+        responseAdded = true;
+        Models.MessageItem aiMsg = new Models.MessageItem();
+        aiMsg.info = resp.info;
+        aiMsg.parts = resp.parts;
+        adapter.addMessage(aiMsg);
+        scrollToBottom();
+    }
+
+    private void finishProcessing() {
+        stopThinkingAnimation();
+        hideStatus();
+        isProcessing.set(false);
+        sendBtn.setEnabled(true);
+        eventClient.stop();
+    }
+
     private void sendMessage() {
         String text = inputField.getText().toString().trim();
         if (text.isEmpty() || client == null || sessionId == null || isProcessing.get()) return;
@@ -113,8 +133,8 @@ public class ChatFragment extends Fragment {
         inputField.setText("");
         isProcessing.set(true);
         sendBtn.setEnabled(false);
+        responseAdded = false;
 
-        // Add user message optimistically
         Models.MessageItem userMsg = new Models.MessageItem();
         userMsg.info = new Models.MessageInfo();
         userMsg.info.role = "user";
@@ -125,11 +145,9 @@ public class ChatFragment extends Fragment {
         adapter.addMessage(userMsg);
         scrollToBottom();
 
-        // Show status bar with "Pensando..."
         showStatus("Pensando…");
         startThinkingAnimation();
 
-        // Start SSE listener for real-time status
         eventClient.start(sessionId, new EventClient.EventListener() {
             @Override public void onConnected() {}
             @Override
@@ -143,7 +161,14 @@ public class ChatFragment extends Fragment {
             }
             @Override
             public void onMessageCompleted(String sid, Models.MessageResponse msg) {
-                // SSE delivered the response; we still rely on POST for the full response
+                if (sessionId != null && !sessionId.equals(sid)) return;
+                android.app.Activity act = getActivity();
+                if (act != null) {
+                    act.runOnUiThread(() -> {
+                        addAiMessage(msg);
+                        finishProcessing();
+                    });
+                }
             }
             @Override
             public void onError(String error) {
@@ -151,39 +176,20 @@ public class ChatFragment extends Fragment {
             }
         });
 
-        // POST the message (blocks until complete)
         executor.execute(() -> {
             try {
                 Models.MessageResponse resp = client.sendMessage(sessionId, text, currentSystemPrompt);
                 mainHandler.post(() -> {
-                    stopThinkingAnimation();
-                    hideStatus();
-                    isProcessing.set(false);
-                    sendBtn.setEnabled(true);
-                    eventClient.stop();
-
-                    if (resp != null && resp.info != null && resp.parts != null) {
-                        Models.MessageItem aiMsg = new Models.MessageItem();
-                        aiMsg.info = resp.info;
-                        aiMsg.parts = resp.parts;
-                        adapter.addMessage(aiMsg);
-                        scrollToBottom();
-
-                        // Update session title after first AI response
-                        if (adapter.getItemCount() <= 3) {
-                            updateSessionTitle(text);
-                        }
+                    addAiMessage(resp);
+                    finishProcessing();
+                    if (adapter.getItemCount() <= 3) {
+                        updateSessionTitle(text);
                     }
                 });
             } catch (Exception e) {
                 android.util.Log.e("Tahc", "send failed", e);
                 mainHandler.post(() -> {
-                    stopThinkingAnimation();
-                    hideStatus();
-                    isProcessing.set(false);
-                    sendBtn.setEnabled(true);
-                    eventClient.stop();
-
+                    finishProcessing();
                     showStatus("Error: " + e.getMessage());
                     mainHandler.postDelayed(() -> hideStatus(), 4000);
                 });
