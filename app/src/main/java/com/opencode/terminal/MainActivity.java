@@ -9,7 +9,11 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.view.View;
 import java.io.*;
-import java.util.zip.*;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.compressors.gzip.GZipCompressorInputStream;
 
 public class MainActivity extends Activity {
 
@@ -122,76 +126,25 @@ public class MainActivity extends Activity {
     private void extractTarGz(String assetName, File destDir) throws IOException {
         destDir.mkdirs();
         try (InputStream is = getAssets().open(assetName);
-             GZIPInputStream gis = new GZIPInputStream(is)) {
-            byte[] buf = new byte[8192];
-            while (true) {
-                byte[] header = new byte[512];
-                if (readFully(gis, header, 512) < 512) break;
-
-                // Check end-of-archive (two zero blocks)
-                boolean end = true;
-                for (byte b : header) {
-                    if (b != 0) { end = false; break; }
-                }
-                if (end) break;
-
-                // Parse octal size from bytes 124-135
-                long size = 0;
-                for (int i = 124; i < 136; i++) {
-                    if (header[i] >= '0' && header[i] <= '7')
-                        size = (size << 3) | (header[i] - '0');
-                }
-
-                // Parse name from bytes 0-99 + prefix 345-499
-                String name = cString(header, 0, 100);
-                if (header[345] != 0)
-                    name = cString(header, 345, 155) + "/" + name;
-                while (name.startsWith("/") || name.startsWith("./"))
-                    name = name.substring(1);
-
-                // Type flag at byte 156
-                boolean isDir = header[156] == '5';
-                File f = new File(destDir, name);
-
-                if (isDir) {
-                    f.mkdirs();
+             GZipCompressorInputStream gzis = new GZipCompressorInputStream(is);
+             TarArchiveInputStream tais = new TarArchiveInputStream(gzis)) {
+            TarArchiveEntry entry;
+            while ((entry = tais.getNextEntry()) != null) {
+                File outFile = new File(destDir, entry.getName());
+                if (!outFile.getCanonicalPath().startsWith(destDir.getCanonicalPath() + File.separator))
+                    throw new IOException("Entry fuera del directorio destino: " + entry.getName());
+                if (entry.isDirectory()) {
+                    outFile.mkdirs();
                 } else {
-                    f.getParentFile().mkdirs();
-                    try (FileOutputStream fos = new FileOutputStream(f)) {
-                        long remaining = size;
-                        while (remaining > 0) {
-                            int toRead = (int) Math.min(buf.length, remaining);
-                            int n = gis.read(buf, 0, toRead);
-                            if (n == -1) break;
-                            fos.write(buf, 0, n);
-                            remaining -= n;
-                        }
+                    outFile.getParentFile().mkdirs();
+                    try (FileOutputStream fos = new FileOutputStream(outFile)) {
+                        byte[] buf = new byte[8192];
+                        int n;
+                        while ((n = tais.read(buf)) != -1) fos.write(buf, 0, n);
                     }
-                    if (name.contains("bin/") || name.endsWith(".so"))
-                        f.setExecutable(true);
                 }
-
-                // Skip padding to next 512-byte boundary
-                long skip = (512 - (size % 512)) % 512;
-                while (skip > 0) skip -= gis.skip(skip);
             }
         }
-    }
-
-    private int readFully(InputStream is, byte[] buf, int len) throws IOException {
-        int total = 0;
-        while (total < len) {
-            int n = is.read(buf, total, len - total);
-            if (n == -1) break;
-            total += n;
-        }
-        return total;
-    }
-
-    private String cString(byte[] buf, int off, int maxLen) {
-        int end = off;
-        while (end < off + maxLen && buf[end] != 0) end++;
-        return new String(buf, off, end - off);
     }
 
     private void extractZipAsset(String assetName, File destDir) throws IOException {

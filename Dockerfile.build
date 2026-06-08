@@ -18,22 +18,17 @@ RUN apt-get update && apt-get install -y \
     unzip \
     curl \
     git \
-    proot \
     tar \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Android SDK Command Line Tools ---
-# Buscar la última versión de cmdline-tools automáticamente
-RUN CMDLINE_URL=$(curl -sL "https://developer.android.com/studio#command-line-tools" | \
-    grep -oP 'https://dl\.google\.com/android/repository/commandlinetools-linux-\d+_latest\.zip' | head -1) && \
-    [ -n "$CMDLINE_URL" ] || CMDLINE_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" && \
-    mkdir -p /opt/android-sdk/cmdline-tools && \
-    wget -q "$CMDLINE_URL" -O /tmp/cmdtools.zip && \
+RUN mkdir -p /opt/android-sdk/cmdline-tools && \
+    wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdtools.zip && \
     unzip -q /tmp/cmdtools.zip -d /opt/android-sdk/cmdline-tools && \
     mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest && \
     rm /tmp/cmdtools.zip
 
-# Aceptar licencias
+# Aceptar licencias + instalar platforms
 RUN yes | sdkmanager --licenses > /dev/null 2>&1 || true && \
     sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
 
@@ -48,7 +43,7 @@ COPY gradle/ ./gradle/
 RUN mkdir -p /build/app/src/main/assets
 
 # --- Descargar Alpine ARM64 rootfs ---
-RUN wget -q https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/alpine-minirootfs-3.21.3-aarch64.tar.gz \
+RUN wget -q https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/aarch64/alpine-minirootfs-3.19.1-aarch64.tar.gz \
     -O /build/app/src/main/assets/alpine-arm64.tar.gz
 
 # --- Descargar Bun para ARM64 ---
