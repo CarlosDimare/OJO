@@ -16,11 +16,6 @@ public class Models {
         public String updatedAt;
     }
 
-    public static class MessageItem {
-        public MessageInfo info;
-        public List<Part> parts;
-    }
-
     public static class MessageInfo {
         public String id;
         public String role;
@@ -29,11 +24,19 @@ public class Models {
     }
 
     public static class Part {
-        public String type;
-        public String text;
+        public String type;           // "text", "thinking", "tool_use", "tool_result"
+        public String text;           // for "text" type
+        public String thinking;       // for "thinking" type
+        public String name;           // tool name for "tool_use"
+        public Object input;          // tool input for "tool_use"
+        public String id;             // tool_use id
+        public String toolUseId;      // for "tool_result"
+        public List<Part> content;    // nested content for "tool_result"
+        public Boolean done;          // for streaming tool_use
     }
 
-    public static class SendMessageBody {
+    public static class MessageItem {
+        public MessageInfo info;
         public List<Part> parts;
     }
 
@@ -42,12 +45,25 @@ public class Models {
         public List<Part> parts;
     }
 
+    public static class SendMessageBody {
+        public String messageID;
+        public String model;
+        public String system;
+        public List<Part> parts;
+    }
+
     public static class CreateSessionBody {
         public String title;
         public CreateSessionBody(String title) { this.title = title; }
     }
 
-    public static class MessagesListResponse {
-        public List<MessageItem> messages;
+    public static class PatchSessionBody {
+        public String title;
+        public PatchSessionBody(String title) { this.title = title; }
+    }
+
+    public static class SessionStatusValue {
+        public String status;    // "idle", "processing", "waiting", "error"
+        public String message;   // human-readable status
     }
 }

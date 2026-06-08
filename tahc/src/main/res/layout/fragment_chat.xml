@@ -5,21 +5,44 @@
     android:orientation="vertical"
     android:background="@color/bg">
 
+    <FrameLayout
+        android:id="@+id/status_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:background="@color/thinking_bg"
+        android:padding="8dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <TextView
+            android:id="@+id/status_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textColor="@color/thinking_text"
+            android:gravity="center_vertical" />
+
+    </FrameLayout>
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/message_list"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:clipToPadding="false"
-        android:padding="12dp" />
+        android:padding="16dp"
+        android:paddingBottom="8dp" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:background="@color/input_bg"
+        android:background="@color/bg"
         android:padding="8dp"
-        android:elevation="4dp">
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="12dp">
 
         <EditText
             android:id="@+id/input_field"
@@ -29,22 +52,26 @@
             android:hint="@string/input_hint"
             android:maxLines="6"
             android:inputType="textMultiLine"
-            android:background="@null"
+            android:background="@drawable/bg_input"
             android:padding="12dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:textSize="16sp"
             android:textColor="@color/on_surface"
-            android:textColorHint="@color/text_secondary"
-            android:gravity="top" />
+            android:textColorHint="@color/text_muted"
+            android:gravity="top"
+            android:minHeight="44dp" />
 
         <ImageButton
             android:id="@+id/send_btn"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
             android:layout_gravity="bottom"
             android:src="@drawable/ic_send"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Enviar"
-            android:tint="@color/accent" />
+            android:elevation="0dp" />
 
     </LinearLayout>
 

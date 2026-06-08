@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <application
-        android:label="Tahc"
+        android:label="AI Chat"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.Tahc">
         <activity
@@ -13,5 +13,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true" />
     </application>
 </manifest>

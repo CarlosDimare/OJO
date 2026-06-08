@@ -3,17 +3,17 @@ package com.opencode.tahc;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.app.AppCompatDelegate;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -36,15 +36,13 @@ public class MainActivity extends AppCompatActivity {
 
     private DrawerLayout drawerLayout;
     private View setupView;
-    private View chatContainer;
     private RecyclerView sessionList;
     private SessionAdapter sessionAdapter;
     private ChatFragment chatFragment;
-    private View newChatBtn;
+    private View settingsBtn;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -52,7 +50,7 @@ public class MainActivity extends AppCompatActivity {
 
         drawerLayout = findViewById(R.id.drawer);
         sessionList = findViewById(R.id.session_list);
-        newChatBtn = findViewById(R.id.new_chat_btn);
+        settingsBtn = findViewById(R.id.settings_btn);
 
         sessionList.setLayoutManager(new LinearLayoutManager(this));
         sessionAdapter = new SessionAdapter(new ArrayList<>(), new SessionAdapter.OnSessionListener() {
@@ -66,7 +64,13 @@ public class MainActivity extends AppCompatActivity {
         toolbar.setNavigationOnClickListener(v ->
                 drawerLayout.openDrawer(Gravity.START));
 
+        View newChatBtn = findViewById(R.id.new_chat_btn);
         newChatBtn.setOnClickListener(v -> startNewChat());
+
+        settingsBtn.setOnClickListener(v -> {
+            Intent intent = new Intent(this, SettingsActivity.class);
+            startActivity(intent);
+        });
 
         chatFragment = new ChatFragment();
         chatFragment.setClient(client);
@@ -74,9 +78,19 @@ public class MainActivity extends AppCompatActivity {
                 .replace(R.id.content_frame, chatFragment)
                 .commit();
 
-        // Will show loading when needed
-
         checkServer();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Update system prompt from settings
+        SharedPreferences prefs = getSharedPreferences("tahc_settings", MODE_PRIVATE);
+        String systemPrompt = prefs.getString("system_prompt",
+                getString(R.string.system_prompt_default));
+        if (chatFragment != null) {
+            chatFragment.setSystemPrompt(systemPrompt);
+        }
     }
 
     private void checkServer() {
@@ -89,7 +103,6 @@ public class MainActivity extends AppCompatActivity {
                     runOnUiThread(() -> showSetup("Servidor respondió pero no saludable"));
                 }
             } catch (Exception e) {
-                android.util.Log.e("Tahc", "Health check failed", e);
                 String detail = e.getClass().getSimpleName() + ": " + e.getMessage();
                 runOnUiThread(() -> showSetup(detail));
             }
@@ -112,12 +125,12 @@ public class MainActivity extends AppCompatActivity {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(48, 48, 48, 48);
         layout.setGravity(Gravity.CENTER);
-        layout.setBackgroundColor(0xff0f0f0f);
+        layout.setBackgroundColor(0xffffffff);
 
         TextView title = new TextView(this);
         title.setText("Servidor no encontrado");
         title.setTextSize(20);
-        title.setTextColor(0xfff5f5f5);
+        title.setTextColor(0xff1a1a1a);
         title.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         layout.addView(title);
 
@@ -138,7 +151,7 @@ public class MainActivity extends AppCompatActivity {
                 "Comando:\nopencode serve --port 4096\n\n" +
                 "O toca el botón para iniciarlo automáticamente.");
         msg.setTextSize(15);
-        msg.setTextColor(0xff9ca3af);
+        msg.setTextColor(0xff6b6b6b);
         msg.setPadding(0, 24, 0, 0);
         msg.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         msg.setLineSpacing(8, 1);
@@ -146,8 +159,8 @@ public class MainActivity extends AppCompatActivity {
 
         Button startBtn = new Button(this);
         startBtn.setText("Iniciar servidor");
-        startBtn.setTextColor(0xff0f0f0f);
-        startBtn.setBackgroundColor(0xffa78bfa);
+        startBtn.setTextColor(0xffffffff);
+        startBtn.setBackgroundColor(0xff1a1a1a);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -158,8 +171,8 @@ public class MainActivity extends AppCompatActivity {
 
         Button copyBtn = new Button(this);
         copyBtn.setText("Copiar comando");
-        copyBtn.setTextColor(0xffa78bfa);
-        copyBtn.setBackgroundColor(0xff2a2a2a);
+        copyBtn.setTextColor(0xff1a1a1a);
+        copyBtn.setBackgroundColor(0xfff5f5f5);
         copyBtn.setOnClickListener(v -> {
             ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
             cm.setPrimaryClip(ClipData.newPlainText("opencode", "opencode serve --port 4096"));
@@ -169,8 +182,8 @@ public class MainActivity extends AppCompatActivity {
 
         Button retryBtn = new Button(this);
         retryBtn.setText("Reintentar");
-        retryBtn.setTextColor(0xffa78bfa);
-        retryBtn.setBackgroundColor(0xff2a2a2a);
+        retryBtn.setTextColor(0xff1a1a1a);
+        retryBtn.setBackgroundColor(0xfff5f5f5);
         retryBtn.setOnClickListener(v -> {
             FrameLayout cf = findViewById(R.id.content_frame);
             if (setupView != null) cf.removeView(setupView);
@@ -204,10 +217,7 @@ public class MainActivity extends AppCompatActivity {
                     new String[]{"serve", "--port", "4096"});
             intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true);
             startService(intent);
-
             Toast.makeText(this, "Iniciando servidor, esperá 3s…", Toast.LENGTH_LONG).show();
-
-            // Re-check after delay
             findViewById(R.id.content_frame).postDelayed(this::checkServer, 3000);
         } catch (Exception e) {
             Toast.makeText(this, "No se pudo iniciar Termux: " + e.getMessage(),

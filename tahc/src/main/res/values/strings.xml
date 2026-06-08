@@ -1,11 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Tahc</string>
+    <string name="app_name">AI Chat</string>
     <string name="input_hint">Escribí un mensaje…</string>
     <string name="new_chat">Nuevo chat</string>
+    <string name="settings">Configuración</string>
+    <string name="system_prompt">System prompt</string>
+    <string name="system_prompt_hint">Instrucciones para el modelo…</string>
+    <string name="system_prompt_default">Eres un asistente útil. Responde en español.</string>
+    <string name="save">Guardar</string>
+    <string name="saved">Guardado</string>
     <string name="start_server">Iniciar servidor</string>
-    <string name="server_instructions">El servidor opencode no está corriendo.\nAsegurate de tener Termux instalado y toca el botón para iniciarlo.</string>
+    <string name="server_instructions">El servidor opencode no está corriendo.\nAsegurate de tener Termux instalado.</string>
     <string name="no_sessions">Sin conversaciones aún</string>
     <string name="delete_session">Eliminar conversación</string>
     <string name="delete_confirm">¿Eliminar esta conversación?</string>
+    <string name="settings_saved">Configuración guardada</string>
+    <string name="thinking">Pensando…</string>
+    <string name="web_search">Buscando en la web…</string>
+    <string name="reading_files">Leyendo archivos…</string>
+    <string name="tool_use">Usando herramienta…</string>
 </resources>

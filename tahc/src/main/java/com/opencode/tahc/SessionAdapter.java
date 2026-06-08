@@ -44,12 +44,20 @@ public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.ViewHold
     public void onBindViewHolder(@NonNull ViewHolder h, int i) {
         Models.Session s = sessions.get(i);
         h.title.setText(s.title != null && !s.title.isEmpty() ? s.title : "Chat");
-        h.preview.setText(s.createdAt != null ? s.createdAt : "");
+        h.preview.setText(formatDate(s.createdAt));
         h.itemView.setOnClickListener(v -> listener.onSessionClick(s));
         h.itemView.setOnLongClickListener(v -> {
             listener.onSessionLongClick(s);
             return true;
         });
+    }
+
+    private String formatDate(String date) {
+        if (date == null || date.isEmpty()) return "";
+        try {
+            if (date.length() >= 10) return date.substring(0, 10);
+        } catch (Exception ignored) {}
+        return date;
     }
 
     @Override

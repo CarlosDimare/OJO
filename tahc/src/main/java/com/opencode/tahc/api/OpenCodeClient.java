@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.MediaType;
@@ -33,14 +34,16 @@ public class OpenCodeClient {
         this.gson = new Gson();
     }
 
+    public OkHttpClient getHttp() { return http; }
+    public String getBaseUrl() { return baseUrl; }
+
     public Models.HealthResponse health() throws IOException {
         Request req = new Request.Builder()
                 .url(baseUrl + "/global/health")
                 .get()
                 .build();
         try (Response res = http.newCall(req).execute()) {
-            String body = res.body().string();
-            return gson.fromJson(body, Models.HealthResponse.class);
+            return gson.fromJson(res.body().string(), Models.HealthResponse.class);
         }
     }
 
@@ -50,11 +53,12 @@ public class OpenCodeClient {
                 .get()
                 .build();
         try (Response res = http.newCall(req).execute()) {
-            String body = res.body().string();
+            if (!res.isSuccessful()) return Collections.emptyList();
+            okhttp3.ResponseBody rb = res.body();
+            if (rb == null) return Collections.emptyList();
             Type type = new TypeToken<List<Models.Session>>() {}.getType();
-            List<Models.Session> sessions = gson.fromJson(body, type);
-            if (sessions == null) return Collections.emptyList();
-            return sessions;
+            List<Models.Session> sessions = gson.fromJson(rb.string(), type);
+            return sessions != null ? sessions : Collections.emptyList();
         }
     }
 
@@ -66,8 +70,7 @@ public class OpenCodeClient {
                 .post(RequestBody.create(json, JSON))
                 .build();
         try (Response res = http.newCall(req).execute()) {
-            String respBody = res.body().string();
-            return gson.fromJson(respBody, Models.Session.class);
+            return gson.fromJson(res.body().string(), Models.Session.class);
         }
     }
 
@@ -81,6 +84,18 @@ public class OpenCodeClient {
         }
     }
 
+    public void patchSessionTitle(String sessionId, String title) throws IOException {
+        Models.PatchSessionBody body = new Models.PatchSessionBody(title);
+        String json = gson.toJson(body);
+        Request req = new Request.Builder()
+                .url(baseUrl + "/session/" + sessionId)
+                .patch(RequestBody.create(json, JSON))
+                .build();
+        try (Response res = http.newCall(req).execute()) {
+            // ignore
+        }
+    }
+
     public List<Models.MessageItem> listMessages(String sessionId) throws IOException {
         Request req = new Request.Builder()
                 .url(baseUrl + "/session/" + sessionId + "/message")
@@ -90,20 +105,21 @@ public class OpenCodeClient {
             if (!res.isSuccessful()) return Collections.emptyList();
             okhttp3.ResponseBody rb = res.body();
             if (rb == null) return Collections.emptyList();
-            String body = rb.string();
             Type type = new TypeToken<List<Models.MessageItem>>() {}.getType();
-            List<Models.MessageItem> messages = gson.fromJson(body, type);
-            if (messages == null) return Collections.emptyList();
-            return messages;
+            List<Models.MessageItem> messages = gson.fromJson(rb.string(), type);
+            return messages != null ? messages : Collections.emptyList();
         }
     }
 
-    public Models.MessageResponse sendMessage(String sessionId, String text) throws IOException {
+    public Models.MessageResponse sendMessage(String sessionId, String text, String system) throws IOException {
         Models.SendMessageBody body = new Models.SendMessageBody();
         Models.Part part = new Models.Part();
         part.type = "text";
         part.text = text;
         body.parts = Collections.singletonList(part);
+        if (system != null && !system.isEmpty()) {
+            body.system = system;
+        }
 
         String json = gson.toJson(body);
         Request req = new Request.Builder()
@@ -116,12 +132,22 @@ public class OpenCodeClient {
             }
             okhttp3.ResponseBody rb = res.body();
             if (rb == null) throw new IOException("Empty response body");
-            String respBody = rb.string();
-            Models.MessageResponse parsed = gson.fromJson(respBody, Models.MessageResponse.class);
-            if (parsed == null || parsed.info == null) {
-                throw new IOException("Invalid response: missing info/parts");
-            }
-            return parsed;
+            return gson.fromJson(rb.string(), Models.MessageResponse.class);
+        }
+    }
+
+    public Map<String, Models.SessionStatusValue> getSessionStatus() throws IOException {
+        Request req = new Request.Builder()
+                .url(baseUrl + "/session/status")
+                .get()
+                .build();
+        try (Response res = http.newCall(req).execute()) {
+            if (!res.isSuccessful()) return Collections.emptyMap();
+            okhttp3.ResponseBody rb = res.body();
+            if (rb == null) return Collections.emptyMap();
+            Type type = new TypeToken<Map<String, Models.SessionStatusValue>>() {}.getType();
+            Map<String, Models.SessionStatusValue> status = gson.fromJson(rb.string(), type);
+            return status != null ? status : Collections.emptyMap();
         }
     }
 }
