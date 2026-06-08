@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Tahc" parent="Theme.MaterialComponents.Light.NoActionBar">
+    <style name="Theme.Tahc" parent="Theme.MaterialComponents.NoActionBar">
         <item name="colorPrimary">@color/on_surface</item>
         <item name="colorOnPrimary">@color/bg</item>
         <item name="colorPrimaryVariant">@color/on_surface</item>

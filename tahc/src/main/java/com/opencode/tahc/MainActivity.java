@@ -125,12 +125,12 @@ public class MainActivity extends AppCompatActivity {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(48, 48, 48, 48);
         layout.setGravity(Gravity.CENTER);
-        layout.setBackgroundColor(0xffffffff);
+        layout.setBackgroundColor(0xff0f0f0f);
 
         TextView title = new TextView(this);
         title.setText("Servidor no encontrado");
         title.setTextSize(20);
-        title.setTextColor(0xff1a1a1a);
+        title.setTextColor(0xfff5f5f5);
         title.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         layout.addView(title);
 
@@ -151,7 +151,7 @@ public class MainActivity extends AppCompatActivity {
                 "Comando:\nopencode serve --port 4096\n\n" +
                 "O toca el botón para iniciarlo automáticamente.");
         msg.setTextSize(15);
-        msg.setTextColor(0xff6b6b6b);
+        msg.setTextColor(0xff9ca3af);
         msg.setPadding(0, 24, 0, 0);
         msg.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         msg.setLineSpacing(8, 1);
@@ -159,8 +159,8 @@ public class MainActivity extends AppCompatActivity {
 
         Button startBtn = new Button(this);
         startBtn.setText("Iniciar servidor");
-        startBtn.setTextColor(0xffffffff);
-        startBtn.setBackgroundColor(0xff1a1a1a);
+        startBtn.setTextColor(0xff0f0f0f);
+        startBtn.setBackgroundColor(0xfff5f5f5);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -171,8 +171,8 @@ public class MainActivity extends AppCompatActivity {
 
         Button copyBtn = new Button(this);
         copyBtn.setText("Copiar comando");
-        copyBtn.setTextColor(0xff1a1a1a);
-        copyBtn.setBackgroundColor(0xfff5f5f5);
+        copyBtn.setTextColor(0xfff5f5f5);
+        copyBtn.setBackgroundColor(0xff2a2a2a);
         copyBtn.setOnClickListener(v -> {
             ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
             cm.setPrimaryClip(ClipData.newPlainText("opencode", "opencode serve --port 4096"));
@@ -182,8 +182,8 @@ public class MainActivity extends AppCompatActivity {
 
         Button retryBtn = new Button(this);
         retryBtn.setText("Reintentar");
-        retryBtn.setTextColor(0xff1a1a1a);
-        retryBtn.setBackgroundColor(0xfff5f5f5);
+        retryBtn.setTextColor(0xfff5f5f5);
+        retryBtn.setBackgroundColor(0xff2a2a2a);
         retryBtn.setOnClickListener(v -> {
             FrameLayout cf = findViewById(R.id.content_frame);
             if (setupView != null) cf.removeView(setupView);
