@@ -188,12 +188,16 @@ public class MainActivity extends Activity {
                 if (!prefix.isEmpty()) name = prefix + "/" + name;
             }
 
-            if (name.startsWith("./")) name = name.substring(2);
+            while (name.startsWith("./") || name.startsWith("/")) {
+                name = name.startsWith("/") ? name.substring(1) : name.substring(2);
+            }
 
             int mode = (int) parseOctal(header, 100, 8);
             File outFile = new File(destDir, name);
 
-            if (!outFile.getCanonicalPath().startsWith(destDir.getCanonicalPath() + File.separator))
+            String destPath = destDir.getCanonicalPath();
+            String outPath = outFile.getCanonicalPath();
+            if (!outPath.equals(destPath) && !outPath.startsWith(destPath + File.separator))
                 throw new IOException("Entry outside target: " + name);
 
             if (typeflag == '5') {
