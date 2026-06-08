@@ -15,7 +15,6 @@
         android:background="@drawable/bg_user_bubble"
         android:textColor="@color/user_bubble_text"
         android:textSize="16sp"
-        android:layout_gravity="end"
-        android:maxWidth="85%" />
+        android:layout_gravity="end" />
 
 </LinearLayout>

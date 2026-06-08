@@ -15,7 +15,6 @@
         android:background="@drawable/bg_ai_bubble"
         android:textColor="@color/ai_bubble_text"
         android:textSize="16sp"
-        android:layout_gravity="start"
-        android:maxWidth="85%" />
+        android:layout_gravity="start" />
 
 </LinearLayout>
