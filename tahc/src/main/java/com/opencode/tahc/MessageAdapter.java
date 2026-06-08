@@ -1,8 +1,6 @@
 package com.opencode.tahc;
 
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
-import android.text.method.LinkMovementMethod;
+import android.graphics.Typeface;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -90,7 +88,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         if (parts == null || parts.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
         for (Models.Part p : parts) {
-            if (p.text != null) sb.append(p.text);
+            if (p != null && p.text != null) sb.append(p.text);
         }
         return sb.toString();
     }
@@ -105,7 +103,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         tv.setTextColor(container.getContext().getColor(R.color.on_surface));
         tv.setTextSize(16);
         tv.setLineSpacing(0, 1.6f);
-        tv.setTypeface(null, 400);
+        tv.setTypeface(Typeface.DEFAULT);
 
         if (markwon != null) {
             markwon.setMarkdown(tv, text);
