@@ -13,7 +13,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
-import org.apache.commons.compress.compressors.gzip.GZipCompressorInputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 
 public class MainActivity extends Activity {
 
@@ -126,7 +126,7 @@ public class MainActivity extends Activity {
     private void extractTarGz(String assetName, File destDir) throws IOException {
         destDir.mkdirs();
         try (InputStream is = getAssets().open(assetName);
-             GZipCompressorInputStream gzis = new GZipCompressorInputStream(is);
+             GzipCompressorInputStream gzis = new GzipCompressorInputStream(is);
              TarArchiveInputStream tais = new TarArchiveInputStream(gzis)) {
             TarArchiveEntry entry;
             while ((entry = tais.getNextEntry()) != null) {
