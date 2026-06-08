@@ -40,7 +40,6 @@ public class MainActivity extends AppCompatActivity {
     private SessionAdapter sessionAdapter;
     private ChatFragment chatFragment;
     private View newChatBtn;
-    private ProgressBar loadingBar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,7 +51,7 @@ public class MainActivity extends AppCompatActivity {
         drawerLayout = findViewById(R.id.drawer);
         sessionList = findViewById(R.id.session_list);
         newChatBtn = findViewById(R.id.new_chat_btn);
-        loadingBar = new ProgressBar(this);
+        chatFragment = new ChatFragment();
 
         sessionList.setLayoutManager(new LinearLayoutManager(this));
         sessionAdapter = new SessionAdapter(new ArrayList<>(), new SessionAdapter.OnSessionListener() {
