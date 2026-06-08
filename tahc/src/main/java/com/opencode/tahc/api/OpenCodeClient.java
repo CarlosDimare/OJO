@@ -87,7 +87,10 @@ public class OpenCodeClient {
                 .get()
                 .build();
         try (Response res = http.newCall(req).execute()) {
-            String body = res.body().string();
+            if (!res.isSuccessful()) return Collections.emptyList();
+            okhttp3.ResponseBody rb = res.body();
+            if (rb == null) return Collections.emptyList();
+            String body = rb.string();
             Type type = new TypeToken<List<Models.MessageItem>>() {}.getType();
             List<Models.MessageItem> messages = gson.fromJson(body, type);
             if (messages == null) return Collections.emptyList();
@@ -99,7 +102,7 @@ public class OpenCodeClient {
         Models.SendMessageBody body = new Models.SendMessageBody();
         Models.Part part = new Models.Part();
         part.type = "text";
-        part.content = text;
+        part.text = text;
         body.parts = Collections.singletonList(part);
 
         String json = gson.toJson(body);
@@ -108,8 +111,17 @@ public class OpenCodeClient {
                 .post(RequestBody.create(json, JSON))
                 .build();
         try (Response res = http.newCall(req).execute()) {
-            String respBody = res.body().string();
-            return gson.fromJson(respBody, Models.MessageResponse.class);
+            if (!res.isSuccessful()) {
+                throw new IOException("Server returned " + res.code() + ": " + res.body().string());
+            }
+            okhttp3.ResponseBody rb = res.body();
+            if (rb == null) throw new IOException("Empty response body");
+            String respBody = rb.string();
+            Models.MessageResponse parsed = gson.fromJson(respBody, Models.MessageResponse.class);
+            if (parsed == null || parsed.info == null) {
+                throw new IOException("Invalid response: missing info/parts");
+            }
+            return parsed;
         }
     }
 }

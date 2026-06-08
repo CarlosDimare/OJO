@@ -13,6 +13,7 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -43,6 +44,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -51,7 +53,6 @@ public class MainActivity extends AppCompatActivity {
         drawerLayout = findViewById(R.id.drawer);
         sessionList = findViewById(R.id.session_list);
         newChatBtn = findViewById(R.id.new_chat_btn);
-        chatFragment = new ChatFragment();
 
         sessionList.setLayoutManager(new LinearLayoutManager(this));
         sessionAdapter = new SessionAdapter(new ArrayList<>(), new SessionAdapter.OnSessionListener() {

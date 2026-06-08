@@ -87,7 +87,7 @@ public class ChatFragment extends Fragment {
         userMsg.info.role = "user";
         Models.Part userPart = new Models.Part();
         userPart.type = "text";
-        userPart.content = text;
+        userPart.text = text;
         userMsg.parts = java.util.Collections.singletonList(userPart);
         adapter.addMessage(userMsg);
         messageList.scrollToPosition(adapter.getItemCount() - 1);
@@ -99,11 +99,13 @@ public class ChatFragment extends Fragment {
                 Models.MessageResponse resp = client.sendMessage(sessionId, text);
                 if (getActivity() != null) {
                     getActivity().runOnUiThread(() -> {
-                        Models.MessageItem aiMsg = new Models.MessageItem();
-                        aiMsg.info = resp.info;
-                        aiMsg.parts = resp.parts;
-                        adapter.addMessage(aiMsg);
-                        messageList.scrollToPosition(adapter.getItemCount() - 1);
+                        if (resp != null && resp.info != null && resp.parts != null) {
+                            Models.MessageItem aiMsg = new Models.MessageItem();
+                            aiMsg.info = resp.info;
+                            aiMsg.parts = resp.parts;
+                            adapter.addMessage(aiMsg);
+                            messageList.scrollToPosition(adapter.getItemCount() - 1);
+                        }
                         sendBtn.setEnabled(true);
                     });
                 }

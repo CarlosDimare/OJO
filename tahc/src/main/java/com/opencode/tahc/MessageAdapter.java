@@ -43,7 +43,8 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     @Override
     public int getItemViewType(int pos) {
         Models.MessageItem item = messages.get(pos);
-        return "user".equals(item.info.role) ? TYPE_USER : TYPE_AI;
+        if (item.info != null && "user".equals(item.info.role)) return TYPE_USER;
+        return TYPE_AI;
     }
 
     @NonNull
@@ -74,7 +75,7 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         if (parts == null || parts.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
         for (Models.Part p : parts) {
-            if (p.content != null) sb.append(p.content);
+            if (p.text != null) sb.append(p.text);
         }
         return sb.toString();
     }

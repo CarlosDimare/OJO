@@ -30,7 +30,7 @@ public class Models {
 
     public static class Part {
         public String type;
-        public String content;
+        public String text;
     }
 
     public static class SendMessageBody {
