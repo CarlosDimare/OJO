@@ -28,7 +28,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.noties.markwon.Markwon;
-import io.noties.markwon.tables.MarkwonTablesPlugin;
+import io.noties.markwon.ext.tables.MarkwonTablesPlugin;
 
 public class ChatFragment extends Fragment {
 
