@@ -28,7 +28,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.noties.markwon.Markwon;
-import io.noties.markwon.ext.tables.MarkwonTablesPlugin;
+import io.noties.markwon.ext.tables.TablePlugin;
 
 public class ChatFragment extends Fragment {
 
@@ -80,7 +80,7 @@ public class ChatFragment extends Fragment {
         messageList.setAdapter(adapter);
 
         Markwon markwon = Markwon.builder(requireContext())
-                .usePlugin(MarkwonTablesPlugin.create(requireContext()))
+                .usePlugin(TablePlugin.create(requireContext()))
                 .build();
         adapter.setMarkwon(markwon);
 
