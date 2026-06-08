@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'app/**'
+      - 'launcher/**'
       - '*.gradle'
       - '*.properties'
       - 'settings.gradle'
@@ -49,33 +49,11 @@ jobs:
           key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: gradle-
 
-      - name: Download Alpine ARM64 rootfs
-        run: |
-          mkdir -p app/src/main/assets
-          wget -q https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/alpine-minirootfs-3.21.3-aarch64.tar.gz \
-            -O app/src/main/assets/alpine-arm64.tar.gz
-
-      - name: Download Bun ARM64
-        run: |
-          wget -q https://github.com/oven-sh/bun/releases/latest/download/bun-linux-aarch64.zip \
-            -O app/src/main/assets/bun-linux-aarch64.zip
-
-      - name: Download proot ARM64
-        run: |
-          wget -q https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.77_aarch64.deb \
-            -O /tmp/proot.deb
-          mkdir -p /tmp/proot-extract
-          dpkg-deb -x /tmp/proot.deb /tmp/proot-extract
-          cp /tmp/proot-extract/data/data/com.termux/files/usr/bin/proot \
-            app/src/main/assets/proot-static-arm64
-          chmod +x app/src/main/assets/proot-static-arm64
-          rm -rf /tmp/proot.deb /tmp/proot-extract
-
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build APK (release)
-        run: ./gradlew assembleRelease --no-daemon
+      - name: Build launcher APK
+        run: ./gradlew :launcher:assembleRelease --no-daemon
 
       - name: Sign APK with debug key
         run: |
@@ -95,12 +73,12 @@ jobs:
             --ks-key-alias opencode \
             --ks-pass pass:android \
             --key-pass pass:android \
-            --out opencode.apk \
-            app/build/outputs/apk/release/app-release-unsigned.apk
+            --out opencode-launcher.apk \
+            launcher/build/outputs/apk/release/launcher-release-unsigned.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: opencode-apk
-          path: opencode.apk
+          name: opencode-launcher
+          path: opencode-launcher.apk
           if-no-files-found: error

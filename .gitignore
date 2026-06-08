@@ -51,6 +51,7 @@ Thumbs.db
 # Android build outputs
 output/
 app/build/
+launcher/build/
 app/src/main/assets/proot-static-arm64
 app/src/main/assets/alpine-arm64.tar.gz
 app/src/main/assets/bun-linux-aarch64.zip
