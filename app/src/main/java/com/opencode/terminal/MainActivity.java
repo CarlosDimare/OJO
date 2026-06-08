@@ -11,9 +11,7 @@ import android.view.View;
 import java.io.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
-import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import java.util.zip.GZIPInputStream;
 
 public class MainActivity extends Activity {
 
@@ -98,8 +96,8 @@ public class MainActivity extends Activity {
 
                 return true;
             } catch (Exception e) {
-                e.printStackTrace();
-                publishProgress("Error: " + e.getMessage(), "-1");
+                android.util.Log.e("OpenCode", "Setup failed", e);
+                publishProgress("Error [" + e.getClass().getSimpleName() + "]: " + e.getMessage(), "-1");
                 return false;
             }
         }
@@ -126,23 +124,155 @@ public class MainActivity extends Activity {
     private void extractTarGz(String assetName, File destDir) throws IOException {
         destDir.mkdirs();
         try (InputStream is = getAssets().open(assetName);
-             GzipCompressorInputStream gzis = new GzipCompressorInputStream(is);
-             TarArchiveInputStream tais = new TarArchiveInputStream(gzis)) {
-            TarArchiveEntry entry;
-            while ((entry = tais.getNextEntry()) != null) {
-                File outFile = new File(destDir, entry.getName());
-                if (!outFile.getCanonicalPath().startsWith(destDir.getCanonicalPath() + File.separator))
-                    throw new IOException("Entry fuera del directorio destino: " + entry.getName());
-                if (entry.isDirectory()) {
-                    outFile.mkdirs();
-                } else {
-                    outFile.getParentFile().mkdirs();
-                    try (FileOutputStream fos = new FileOutputStream(outFile)) {
-                        byte[] buf = new byte[8192];
-                        int n;
-                        while ((n = tais.read(buf)) != -1) fos.write(buf, 0, n);
+             GZIPInputStream gzis = new GZIPInputStream(is);
+             BufferedInputStream bis = new BufferedInputStream(gzis)) {
+            extractTar(bis, destDir);
+        }
+    }
+
+    private void extractTar(InputStream in, File destDir) throws IOException {
+        byte[] header = new byte[512];
+        byte[] buf = new byte[8192];
+        String pendingLongName = null;
+
+        while (true) {
+            int bytesRead = readFully(in, header);
+            if (bytesRead == -1) break;
+            if (bytesRead < 512) throw new IOException("Truncated tar header");
+
+            if (isZeroBlock(header)) {
+                readFully(in, header);
+                break;
+            }
+
+            byte typeflag = header[156];
+            long size = parseOctal(header, 124, 12);
+
+            if (typeflag == 'L') {
+                byte[] nameData = new byte[(int) size];
+                readFully(in, nameData);
+                pendingLongName = new String(nameData, 0, (int) size - 1, "UTF-8");
+                skipPadding(in, size);
+                continue;
+            }
+
+            if (typeflag == 'K') {
+                skipData(in, size);
+                continue;
+            }
+
+            if (typeflag == 'x' || typeflag == 'g') {
+                byte[] paxData = new byte[(int) size];
+                readFully(in, paxData);
+                String paxStr = new String(paxData, 0, (int) size, "UTF-8");
+                String[] lines = paxStr.split("\n");
+                for (String line : lines) {
+                    int space = line.indexOf(' ');
+                    if (space < 0) continue;
+                    String kv = line.substring(space + 1);
+                    int eq = kv.indexOf('=');
+                    if (eq < 0) continue;
+                    if (kv.substring(0, eq).equals("path")) {
+                        pendingLongName = kv.substring(eq + 1);
                     }
                 }
+                skipPadding(in, size);
+                continue;
+            }
+
+            String name;
+            if (pendingLongName != null) {
+                name = pendingLongName;
+                pendingLongName = null;
+            } else {
+                name = extractString(header, 0, 100);
+                String prefix = extractString(header, 345, 155);
+                if (!prefix.isEmpty()) name = prefix + "/" + name;
+            }
+
+            if (name.startsWith("./")) name = name.substring(2);
+
+            int mode = (int) parseOctal(header, 100, 8);
+            File outFile = new File(destDir, name);
+
+            if (!outFile.getCanonicalPath().startsWith(destDir.getCanonicalPath() + File.separator))
+                throw new IOException("Entry outside target: " + name);
+
+            if (typeflag == '5') {
+                outFile.mkdirs();
+            } else if (typeflag == '0' || typeflag == 0) {
+                outFile.getParentFile().mkdirs();
+                if (size > 0) {
+                    try (FileOutputStream fos = new FileOutputStream(outFile)) {
+                        long remaining = size;
+                        while (remaining > 0) {
+                            int toRead = (int) Math.min(buf.length, remaining);
+                            int n = in.read(buf, 0, toRead);
+                            if (n == -1) throw new IOException("Unexpected EOF reading " + name);
+                            fos.write(buf, 0, n);
+                            remaining -= n;
+                        }
+                    }
+                }
+                if ((mode & 0111) != 0) outFile.setExecutable(true);
+            } else if (typeflag == '2') {
+                outFile.getParentFile().mkdirs();
+                String linkTarget = extractString(header, 157, 100);
+                try {
+                    android.system.Os.symlink(linkTarget, outFile.getAbsolutePath());
+                } catch (Exception e) {
+                    android.util.Log.w("OpenCode", "symlink failed: " + name + " -> " + linkTarget);
+                }
+            }
+
+            skipPadding(in, size);
+        }
+    }
+
+    private int readFully(InputStream in, byte[] b) throws IOException {
+        int total = 0;
+        while (total < b.length) {
+            int n = in.read(b, total, b.length - total);
+            if (n == -1) return total == 0 ? -1 : total;
+            total += n;
+        }
+        return total;
+    }
+
+    private long parseOctal(byte[] b, int off, int len) {
+        long val = 0;
+        for (int i = off; i < off + len; i++) {
+            byte c = b[i];
+            if (c >= '0' && c <= '7') val = (val << 3) + (c - '0');
+            else if (c == '\0' || c == ' ') break;
+        }
+        return val;
+    }
+
+    private String extractString(byte[] b, int off, int len) {
+        int end = off;
+        while (end < off + len && b[end] != 0) end++;
+        return new String(b, off, end - off);
+    }
+
+    private boolean isZeroBlock(byte[] b) {
+        for (int i = 0; i < 512; i++) if (b[i] != 0) return false;
+        return true;
+    }
+
+    private void skipPadding(InputStream in, long dataSize) throws IOException {
+        long pad = (512 - (dataSize % 512)) % 512;
+        skipData(in, pad);
+    }
+
+    private void skipData(InputStream in, long count) throws IOException {
+        while (count > 0) {
+            long n = in.skip(count);
+            if (n <= 0) {
+                if (in.read() == -1) throw new IOException("Unexpected EOF during skip");
+                count--;
+            } else {
+                count -= n;
             }
         }
     }
