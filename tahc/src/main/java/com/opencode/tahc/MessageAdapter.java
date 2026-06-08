@@ -67,31 +67,21 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
         if (h instanceof UserHolder) {
             String text = partsToPlainText(item.parts);
-            ((UserHolder) h).text.setText(text);
+            UserHolder uh = (UserHolder) h;
+            uh.text.setText(text);
+            uh.text.setLineSpacing(0, 1.6f);
         } else if (h instanceof AiHolder) {
             AiHolder ai = (AiHolder) h;
             ai.container.removeAllViews();
 
             if (item.parts == null || item.parts.isEmpty()) return;
 
+            // Only render text parts — thinking/tool_use shown via SSE in real-time
             for (Models.Part part : item.parts) {
                 if (part == null) continue;
-
-                switch (part.type != null ? part.type : "") {
-                    case "thinking":
-                        addThinkingView(ai.container, part);
-                        break;
-                    case "tool_use":
-                        addToolUseView(ai.container, part);
-                        break;
-                    case "tool_result":
-                        // Hide tool results by default
-                        break;
-                    case "text":
-                    default:
-                        addTextView(ai.container, part.text);
-                        break;
-                }
+                if (!"text".equals(part.type)) continue;
+                if (part.text == null || part.text.isEmpty()) continue;
+                addTextView(ai.container, part.text);
             }
         }
     }
@@ -105,41 +95,6 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         return sb.toString();
     }
 
-    private void addThinkingView(LinearLayout container, Models.Part part) {
-        if (part.thinking == null || part.thinking.isEmpty()) return;
-
-        LayoutInflater inflater = LayoutInflater.from(container.getContext());
-        View view = inflater.inflate(R.layout.item_thinking, container, false);
-
-        TextView label = view.findViewById(R.id.thinking_label);
-        TextView toggle = view.findViewById(R.id.thinking_toggle);
-        TextView textView = view.findViewById(R.id.thinking_text);
-        View header = view.findViewById(R.id.thinking_header);
-
-        label.setText("Razonamiento");
-        textView.setText(part.thinking);
-
-        header.setOnClickListener(v -> {
-            boolean visible = textView.getVisibility() == View.VISIBLE;
-            textView.setVisibility(visible ? View.GONE : View.VISIBLE);
-            toggle.setText(visible ? "▸" : "▾");
-        });
-
-        container.addView(view);
-    }
-
-    private void addToolUseView(LinearLayout container, Models.Part part) {
-        TextView tv = new TextView(container.getContext());
-        tv.setPadding(0, 4, 0, 4);
-        tv.setTextSize(13);
-        tv.setTextColor(container.getContext().getColor(R.color.tool_use_text));
-
-        String toolName = part.name != null ? part.name : "herramienta";
-        tv.setText("⚙ " + toolName);
-
-        container.addView(tv);
-    }
-
     private void addTextView(LinearLayout container, String text) {
         if (text == null || text.isEmpty()) return;
 
@@ -148,8 +103,9 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
         tv.setTextColor(container.getContext().getColor(R.color.on_surface));
-        tv.setTextSize(15);
-        tv.setLineSpacing(0, 1.35f);
+        tv.setTextSize(16);
+        tv.setLineSpacing(0, 1.6f);
+        tv.setTypeface(null, 400);
 
         if (markwon != null) {
             markwon.setMarkdown(tv, text);

@@ -28,6 +28,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.noties.markwon.Markwon;
+import io.noties.markwon.tables.MarkwonTablesPlugin;
 
 public class ChatFragment extends Fragment {
 
@@ -78,7 +79,9 @@ public class ChatFragment extends Fragment {
         messageList.setLayoutManager(new LinearLayoutManager(getContext()));
         messageList.setAdapter(adapter);
 
-        Markwon markwon = Markwon.create(requireContext());
+        Markwon markwon = Markwon.builder(requireContext())
+                .usePlugin(MarkwonTablesPlugin.create(requireContext()))
+                .build();
         adapter.setMarkwon(markwon);
 
         sendBtn.setOnClickListener(view -> sendMessage());

@@ -110,6 +110,15 @@ public class EventClient {
                 }
             }
 
+            // Check for thinking content (show reasoning in real-time)
+            if (json.has("thinking") && !json.get("thinking").isJsonNull()) {
+                String thinking = json.get("thinking").getAsString();
+                if (!thinking.isEmpty()) {
+                    listener.onStatusUpdate(ourId, "thinking", thinking);
+                    return;
+                }
+            }
+
             // Extract status
             String status = json.has("status") && !json.get("status").isJsonNull()
                     ? json.get("status").getAsString() : event;

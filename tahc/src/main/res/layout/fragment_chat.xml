@@ -15,13 +15,20 @@
         android:paddingStart="16dp"
         android:paddingEnd="16dp">
 
-        <TextView
-            android:id="@+id/status_text"
+        <ScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="13sp"
-            android:textColor="@color/thinking_text"
-            android:gravity="center_vertical" />
+            android:maxHeight="200dp">
+
+            <TextView
+                android:id="@+id/status_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:textColor="@color/thinking_text"
+                android:gravity="start" />
+
+        </ScrollView>
 
     </FrameLayout>
 
