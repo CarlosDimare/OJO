@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="Tahc"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.Tahc">
         <activity
             android:name=".MainActivity"

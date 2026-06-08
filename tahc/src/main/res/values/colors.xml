@@ -1,16 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#1a73e8</color>
-    <color name="primary_dark">#1557b0</color>
-    <color name="bg_light">#f5f5f5</color>
-    <color name="bg_dark">#1e1e1e</color>
-    <color name="user_bubble">#1a73e8</color>
-    <color name="user_bubble_text">#ffffff</color>
-    <color name="ai_bubble">#e8e8e8</color>
-    <color name="ai_bubble_text">#1e1e1e</color>
-    <color name="surface">#ffffff</color>
-    <color name="on_surface">#1e1e1e</color>
-    <color name="text_secondary">#666666</color>
-    <color name="code_bg">#2d2d2d</color>
-    <color name="divider">#e0e0e0</color>
+    <color name="bg">#0f0f0f</color>
+    <color name="sidebar_bg">#1a1a1a</color>
+    <color name="bubble_user">#3b3b3b</color>
+    <color name="bubble_user_text">#f5f5f5</color>
+    <color name="bubble_ai">#2a2a2a</color>
+    <color name="bubble_ai_text">#e5e5e5</color>
+    <color name="accent">#a78bfa</color>
+    <color name="surface">#1a1a1a</color>
+    <color name="on_surface">#f5f5f5</color>
+    <color name="text_secondary">#9ca3af</color>
+    <color name="divider">#2d2d2d</color>
+    <color name="toolbar_bg">#0f0f0f</color>
+    <color name="input_bg">#1a1a1a</color>
+    <color name="code_bg">#1e1e1e</color>
 </resources>

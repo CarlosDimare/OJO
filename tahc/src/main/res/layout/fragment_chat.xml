@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/bg_light">
+    android:background="@color/bg">
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/message_list"
@@ -17,7 +17,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:background="@color/surface"
+        android:background="@color/input_bg"
         android:padding="8dp"
         android:elevation="4dp">
 
@@ -32,6 +32,8 @@
             android:background="@null"
             android:padding="12dp"
             android:textSize="16sp"
+            android:textColor="@color/on_surface"
+            android:textColorHint="@color/text_secondary"
             android:gravity="top" />
 
         <ImageButton
@@ -42,7 +44,7 @@
             android:src="@drawable/ic_send"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Enviar"
-            android:tint="@color/primary" />
+            android:tint="@color/accent" />
 
     </LinearLayout>
 

@@ -4,13 +4,13 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="24dp"
-    android:background="@color/primary">
+    android:background="@color/sidebar_bg">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Tahc"
-        android:textColor="@android:color/white"
+        android:textColor="@color/on_surface"
         android:textSize="28sp"
         android:textStyle="bold" />
 
@@ -18,7 +18,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="opencode-ai"
-        android:textColor="#ccffffff"
+        android:textColor="@color/text_secondary"
         android:textSize="14sp"
         android:layout_marginTop="4dp" />
 
