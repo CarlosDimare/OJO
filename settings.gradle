@@ -1,3 +1,4 @@
 rootProject.name = "OpenCode"
 include ':app'
 include ':launcher'
+include ':tahc'

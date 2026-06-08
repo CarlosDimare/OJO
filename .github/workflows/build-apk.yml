@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'launcher/**'
+      - 'tahc/**'
       - '*.gradle'
       - '*.properties'
       - 'settings.gradle'
@@ -52,10 +53,11 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build launcher APK
-        run: ./gradlew :launcher:assembleRelease --no-daemon
+      - name: Build all APKs
+        run: |
+          ./gradlew :launcher:assembleRelease :tahc:assembleRelease --no-daemon
 
-      - name: Sign APK with debug key
+      - name: Generate debug keystore
         run: |
           keytool -genkey -v \
             -keystore /tmp/debug.keystore \
@@ -67,6 +69,9 @@ jobs:
             -keypass android \
             -dname "CN=OpenCode,O=OpenCode,C=AR" \
             -storetype PKCS12 2>/dev/null
+
+      - name: Sign launcher APK
+        run: |
           APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | head -1)
           "$APKSIGNER" sign \
             --ks /tmp/debug.keystore \
@@ -76,9 +81,27 @@ jobs:
             --out opencode-launcher.apk \
             launcher/build/outputs/apk/release/launcher-release-unsigned.apk
 
-      - name: Upload APK artifact
+      - name: Sign Tahc APK
+        run: |
+          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | head -1)
+          "$APKSIGNER" sign \
+            --ks /tmp/debug.keystore \
+            --ks-key-alias opencode \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out opencode-tahc.apk \
+            tahc/build/outputs/apk/release/tahc-release-unsigned.apk
+
+      - name: Upload launcher
         uses: actions/upload-artifact@v4
         with:
           name: opencode-launcher
           path: opencode-launcher.apk
+          if-no-files-found: error
+
+      - name: Upload Tahc
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-tahc
+          path: opencode-tahc.apk
           if-no-files-found: error
