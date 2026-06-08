@@ -11,7 +11,6 @@ import android.view.View;
 import java.io.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import java.util.zip.GZIPInputStream;
 
 public class MainActivity extends Activity {
 
@@ -71,7 +70,7 @@ public class MainActivity extends Activity {
 
                 // 1. Extraer Alpine ARM64 rootfs
                 publishProgress("Extrayendo Alpine Linux ARM64...", "10");
-                extractTarGz("alpine-arm64.tar.gz", rootfs);
+                extractTar("alpine-arm64.tar", rootfs);
 
                 // 2. Extraer Bun ARM64
                 publishProgress("Instalando Bun runtime...", "40");
@@ -121,11 +120,10 @@ public class MainActivity extends Activity {
     //  Helpers
     // --------------------------------------------------------
 
-    private void extractTarGz(String assetName, File destDir) throws IOException {
+    private void extractTar(String assetName, File destDir) throws IOException {
         destDir.mkdirs();
         try (InputStream is = getAssets().open(assetName);
-             GZIPInputStream gzis = new GZIPInputStream(is);
-             BufferedInputStream bis = new BufferedInputStream(gzis)) {
+             BufferedInputStream bis = new BufferedInputStream(is)) {
             extractTar(bis, destDir);
         }
     }
