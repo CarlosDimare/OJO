@@ -66,7 +66,6 @@ public class MainActivity extends Activity {
         protected Boolean doInBackground(Void... voids) {
             try {
                 File rootfs = new File(getFilesDir(), "alpine-rootfs");
-                File bunBin = new File(getFilesDir(), "bin/bun");
 
                 // 1. Extraer Alpine ARM64 rootfs
                 publishProgress("Extrayendo Alpine Linux ARM64...", "10");
@@ -74,9 +73,7 @@ public class MainActivity extends Activity {
 
                 // 2. Extraer Bun ARM64
                 publishProgress("Instalando Bun runtime...", "40");
-                extractZipAsset("bun-linux-aarch64.zip", new File(getFilesDir(), "bin"));
-                new File(getFilesDir(), "bin/bun-linux-aarch64").renameTo(bunBin);
-                bunBin.setExecutable(true);
+                extractBun();
 
                 // 3. Script de instalación de opencode dentro de proot
                 publishProgress("Preparando script de instalación...", "55");
@@ -223,7 +220,20 @@ public class MainActivity extends Activity {
                 try {
                     android.system.Os.symlink(linkTarget, outFile.getAbsolutePath());
                 } catch (Exception e) {
-                    android.util.Log.w("OpenCode", "symlink failed: " + name + " -> " + linkTarget);
+                    File targetFile = linkTarget.startsWith("/")
+                        ? new File(destDir, linkTarget.substring(1))
+                        : new File(outFile.getParentFile(), linkTarget);
+                    if (targetFile.exists()) {
+                        try (FileInputStream fis = new FileInputStream(targetFile);
+                             FileOutputStream fos = new FileOutputStream(outFile)) {
+                            byte[] cb = new byte[8192];
+                            int n;
+                            while ((n = fis.read(cb)) != -1) fos.write(cb, 0, n);
+                        }
+                        outFile.setExecutable(targetFile.canExecute());
+                    } else {
+                        android.util.Log.w("OpenCode", "symlink target missing: " + linkTarget);
+                    }
                 }
             }
 
@@ -297,6 +307,36 @@ public class MainActivity extends Activity {
                 zis.closeEntry();
             }
         }
+    }
+
+    private void extractBun() throws IOException {
+        File bunBin = new File(getFilesDir(), "bin/bun");
+        bunBin.getParentFile().mkdirs();
+
+        File tmpDir = new File(getFilesDir(), ".bun-tmp");
+        tmpDir.mkdirs();
+        extractZipAsset("bun-linux-aarch64.zip", tmpDir);
+
+        File bunSrc = new File(tmpDir, "bun-linux-aarch64/bun");
+        if (!bunSrc.exists()) throw new IOException("bun binary not found in zip");
+
+        try (FileInputStream fis = new FileInputStream(bunSrc);
+             FileOutputStream fos = new FileOutputStream(bunBin)) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = fis.read(buf)) != -1) fos.write(buf, 0, n);
+        }
+        bunBin.setExecutable(true);
+
+        deleteRecursive(tmpDir);
+    }
+
+    private void deleteRecursive(File f) {
+        if (f.isDirectory()) {
+            File[] kids = f.listFiles();
+            if (kids != null) for (File c : kids) deleteRecursive(c);
+        }
+        f.delete();
     }
 
     private void writeInstallScript() throws IOException {
